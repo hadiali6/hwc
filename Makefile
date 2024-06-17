@@ -11,17 +11,17 @@ LIBS=\
 # to your build system yourself and provide them in the include path.
 xdg-shell-protocol.h:
 	$(WAYLAND_SCANNER) server-header \
-		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
+		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml ./build/protocols/$@
 
 hwc: src/main.c xdg-shell-protocol.h
 	$(CC) $(CFLAGS) \
-		-g -Werror -I. \
+		-g -Werror -I./build/protocols \
 		-DWLR_USE_UNSTABLE \
 		-o build/$@ $< \
 		$(LIBS)
 
 clean:
-	rm -f build/hwc xdg-shell-protocol.h xdg-shell-protocol.c
+	rm -f build/hwc build/protocols/xdg-shell-protocol.h build/protocols/xdg-shell-protocol.c
 
 .DEFAULT_GOAL=hwc
 .PHONY: clean
