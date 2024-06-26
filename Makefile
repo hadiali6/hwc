@@ -13,10 +13,11 @@ xdg-shell-protocol.h:
 	$(WAYLAND_SCANNER) server-header \
 		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml ./build/protocols/$@
 
-hwc: src/main.c src/util/macros.h xdg-shell-protocol.h
+hwc: src/*.c src/macros.h xdg-shell-protocol.h
 	$(CC) $(CFLAGS) \
-		-g -Werror -I./build/protocols \
+		-g -Werror -Wundef -Wno-unused-parameter -Wno-error=uninitialized \
 		-DWLR_USE_UNSTABLE \
+		-Ibuild/protocols \
 		-o build/$@ $< \
 		$(LIBS)
 
