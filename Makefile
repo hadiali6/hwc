@@ -11,7 +11,6 @@ PROTOCOL_SRC = $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
 PROTOCOL_HEADER = xdg-shell-protocol.h
 TARGET = hwc
 SRCS = src/main.c src/server.c
-OBJS = $(SRCS:.c=.o)
 
 .DEFAULT_GOAL = $(TARGET)
 
