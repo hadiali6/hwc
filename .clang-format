@@ -1,0 +1,18 @@
+ColumnLimit:     120
+IndentWidth:     4
+UseTab:          Never
+
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: "^<wlr/"
+    Priority: -1
+  - Regex: "^<"
+    Priority: -2
+  - Regex: ".*"
+    Priority: 0
+
+ForEachMacros:
+  - wl_list_for_each
+  - wl_list_for_each_reverse
+  - wl_list_for_each_safe
+  - wl_list_for_each_reverse_safe

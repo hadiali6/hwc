@@ -1,28 +1,35 @@
-CC=clang
-WAYLAND_PROTOCOLS=$(shell pkg-config --variable=pkgdatadir wayland-protocols)
-WAYLAND_SCANNER=$(shell pkg-config --variable=wayland_scanner wayland-scanner)
-LIBS=\
-	 $(shell pkg-config --cflags --libs "wlroots-0.18") \
-	 $(shell pkg-config --cflags --libs wayland-server) \
-	 $(shell pkg-config --cflags --libs xkbcommon)
+CC = clang
+CFLAGS = -g -Wall -Wextra -DWLR_USE_UNSTABLE
+WAYLAND_PROTOCOLS = $(shell pkg-config --variable=pkgdatadir wayland-protocols)
+WAYLAND_SCANNER = $(shell pkg-config --variable=wayland_scanner wayland-scanner)
+LIBS = $(shell pkg-config --cflags --libs "wlroots-0.18" wayland-server xkbcommon)
 
-# wayland-scanner is a tool which generates C headers and rigging for Wayland
-# protocols, which are specified in XML. wlroots requires you to rig these up
-# to your build system yourself and provide them in the include path.
-xdg-shell-protocol.h:
-	$(WAYLAND_SCANNER) server-header \
-		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml ./build/protocols/$@
+BUILD_DIR = build
+PROTOCOL_DIR = $(BUILD_DIR)/protocols
 
-hwc: src/*.c src/macros.h xdg-shell-protocol.h
-	$(CC) $(CFLAGS) \
-		-g -Werror -Wundef -Wno-unused-parameter -Wno-error=uninitialized \
-		-DWLR_USE_UNSTABLE \
-		-Ibuild/protocols \
-		-o build/$@ $< \
-		$(LIBS)
+PROTOCOL_SRC = $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
+PROTOCOL_HEADER = xdg-shell-protocol.h
+TARGET = hwc
+SRCS = src/main.c src/server.c
+OBJS = $(SRCS:.c=.o)
+
+.DEFAULT_GOAL = $(TARGET)
+
+.PHONY: all clean
+
+all: $(TARGET)
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR) $(PROTOCOL_DIR)
+
+$(PROTOCOL_DIR)/$(PROTOCOL_HEADER): $(PROTOCOL_SRC) | $(BUILD_DIR)
+	$(WAYLAND_SCANNER) server-header $< $@
+
+$(TARGET): $(SRCS) $(PROTOCOL_DIR)/$(PROTOCOL_HEADER) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(PROTOCOL_DIR) -o $(BUILD_DIR)/$@ $(SRCS) $(LIBS)
 
 clean:
-	rm -f build/hwc build/protocols/xdg-shell-protocol.h build/protocols/xdg-shell-protocol.c
+	rm -rf $(BUILD_DIR)
 
-.DEFAULT_GOAL=hwc
-.PHONY: clean
+src/main.o: src/main.c
+src/server.o: src/server.c
