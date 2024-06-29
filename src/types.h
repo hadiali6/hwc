@@ -1,6 +1,3 @@
-#ifndef TYPES_H
-#define TYPES_H
-
 #include <wayland-server-core.h>
 
 #include <wlr/backend.h>
@@ -14,6 +11,11 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_output_management_v1.h>
+#include <wlr/types/wlr_gamma_control_v1.h>
+
+#ifndef TYPES_H
+#define TYPES_H
 
 enum hwc_cursor_mode {
     HWC_CURSOR_PASSTHROUGH,
@@ -28,6 +30,11 @@ struct hwc_server {
     struct wlr_allocator *allocator;
     struct wlr_scene *scene;
     struct wlr_scene_output_layout *scene_layout;
+
+	struct wlr_output_manager_v1 *output_manager;
+    struct wl_listener output_configuration_applied;
+
+    struct wlr_gamma_control_manager_v1 *gamma_control_manager;
 
     struct wlr_xdg_shell *xdg_shell;
     struct wl_listener new_xdg_toplevel;
