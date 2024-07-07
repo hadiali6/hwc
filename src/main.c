@@ -1,13 +1,8 @@
-#define _POSIX_C_SOURCE 200809L
-/*#define _POSIX_C_SOURCE 200112L*/
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <wlr/util/log.h>
-
-#include "macros.h"
-#include "server.h"
 
 const char help[] =
     "Usage: %s [options]\n"
@@ -19,51 +14,65 @@ const char help[] =
     "-s --startup <command>            Specify a command to run at startup.\n";
 
 static const struct option long_options[] = {
-    {"version", no_argument, null, 'v'},       {"verbosity", required_argument, null, 'V'},
-    {"help", no_argument, null, 'h'},          {"config", required_argument, null, 'c'},
-    {"startup", required_argument, null, 's'}, {0, 0, 0, 0}
+    { "version",   no_argument,       NULL, 'v' },
+    { "verbosity", required_argument, NULL, 'V' },
+    { "help",      no_argument,       NULL, 'h' },
+    { "config",    required_argument, NULL, 'c' },
+    { "startup",   required_argument, NULL, 's' },
+    { 0, 0, 0, 0 }
 };
 
+#define DEFAULT_HWC_CONFIG_PATH "~/.config/hwc/conifg"
+#define HWC_VERSION "0.01-alpha"
+
+#include "init.h"
+
+static void hwc_set_verbosity(
+    enum wlr_log_importance *verbosity,
+    enum wlr_log_importance value
+) {
+    *verbosity = value;
+    if (
+        (*verbosity != WLR_SILENT) &&
+        (*verbosity != WLR_ERROR) &&
+        (*verbosity != WLR_INFO) &&
+        (*verbosity != WLR_DEBUG)
+    ) {
+        fprintf(stderr, "Invalid verbosity level!\n");
+        exit(EXIT_FAILURE);
+    }
+    fprintf(stdout, "Verbosity level set to %d\n", *verbosity);
+}
+
 int main(int argc, char *argv[]) {
-    char *startup_cmd = null;
-    char *config_path = "~/.config/hwc/config.yml";
-    enum wlr_log_importance verbosity = WLR_ERROR;
+    char *startup_cmd = NULL;
+    char *config_path = DEFAULT_HWC_CONFIG_PATH;
+#ifdef DEBUG
+    enum wlr_log_importance verbosity = WLR_DEBUG;
+#else
+    enum wlr_log_importance verbosity = WLR_SILENT;
+#endif
 
     int option_index = 0;
     int option;
     while ((option = getopt_long(argc, argv, "vV:hc:s:", long_options, &option_index)) != -1) {
         switch (option) {
-        case 'v':
-            fprintf(stdout, "hwc version: %s\n", "0.01-alpha");
-            return EXIT_SUCCESS;
-        case 'V':
-            verbosity = atoi(optarg);
-            if (verbosity != WLR_SILENT && verbosity != WLR_ERROR && verbosity != WLR_INFO && verbosity != WLR_DEBUG) {
-                fprintf(stderr, "Invalid verbosity level!\n");
-                return EXIT_FAILURE;
-            }
-            fprintf(stdout, "Verbosity level set to %d\n", verbosity);
-            break;
-        case 'h':
-            fprintf(stdout, help, argv[0]);
-            return EXIT_SUCCESS;
-        case 'c':
-            config_path = optarg;
-            fprintf(stdout, "Config path set to: %s\n", config_path);
-            break;
-        case 's':
-            startup_cmd = optarg;
-            break;
-        default:
-            fprintf(stdout, "Usage: %s [-s startup command]\n", argv[0]);
-            return EXIT_SUCCESS;
+            case 'v': fprintf(stdout, "hwc version: %s\n", HWC_VERSION); exit(EXIT_SUCCESS);
+            case 'V': hwc_set_verbosity(&verbosity, atoi(optarg)); break;
+            case 'h': fprintf(stdout, help, argv[0]); exit(EXIT_SUCCESS);
+            case 'c': config_path = optarg; fprintf(stdout, "Config path set to: %s\n", config_path); break;
+            case 's': startup_cmd = optarg; break;
+            default: fprintf(stdout, help, argv[0]); exit(EXIT_SUCCESS);
         }
     }
     if (optind < argc) {
-        fprintf(stdout, "Usage: %s [-s startup command]\n", argv[0]);
+        fprintf(stdout, help, argv[0]);
         return EXIT_SUCCESS;
     }
-    wlr_log_init(verbosity, null);
-    init_server(startup_cmd);
+    wlr_log_init(verbosity, NULL);
+    init_compositor(startup_cmd);
+    /*struct hwc_comositor comositor = { 0 };*/
+    /*init_compositor(&server);*/
+    /*start_compositor(&server);*/
     return EXIT_SUCCESS;
 }

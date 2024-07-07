@@ -1,19 +1,14 @@
 #include <assert.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <time.h>
-
 #include <wayland-server-core.h>
-
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_output.h>
-#include <wlr/types/wlr_output_management_v1.h>
-#include <wlr/util/log.h>
+#include <wlr/types/wlr_output_layout.h>
 
-#include "macros.h"
-#include "types.h"
+#include "output.h"
 
-static void output_frame(struct wl_listener *listener, void *data) {
+void output_frame(struct wl_listener *listener, void *data) {
     /* This function is called every time an output is ready to display a frame,
      * generally at the output's refresh rate (e.g. 60Hz). */
     struct hwc_output *output = wl_container_of(listener, output, frame);
@@ -25,14 +20,14 @@ static void output_frame(struct wl_listener *listener, void *data) {
     );
 
     /* Render the scene if needed and commit the output */
-    wlr_scene_output_commit(scene_output, null);
+    wlr_scene_output_commit(scene_output, NULL);
 
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(scene_output, &now);
 }
 
-static void output_request_state(struct wl_listener *listener, void *data) {
+void output_request_state(struct wl_listener *listener, void *data) {
     /* This function is called when the backend requests a new state for
      * the output. For example, Wayland and X11 backends request a new mode
      * when the output window is resized. */
@@ -41,9 +36,8 @@ static void output_request_state(struct wl_listener *listener, void *data) {
     wlr_output_commit_state(output->wlr_output, event->state);
 }
 
-static void output_destroy(struct wl_listener *listener, void *data) {
+void output_destroy(struct wl_listener *listener, void *data) {
     struct hwc_output *output = wl_container_of(listener, output, destroy);
-
     wl_list_remove(&output->frame.link);
     wl_list_remove(&output->request_state.link);
     wl_list_remove(&output->destroy.link);
@@ -51,7 +45,7 @@ static void output_destroy(struct wl_listener *listener, void *data) {
     free(output);
 }
 
-static void server_new_output(struct wl_listener *listener, void *data) {
+void server_new_output(struct wl_listener *listener, void *data) {
     /* This event is raised by the backend when a new output (aka a display or
      * monitor) becomes available. */
     struct hwc_server *server = wl_container_of(listener, server, new_output);
@@ -72,7 +66,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
      * just pick the monitor's preferred mode, a more sophisticated compositor
      * would let the user configure it. */
     struct wlr_output_mode *mode = wlr_output_preferred_mode(wlr_output);
-    if (mode != null) {
+    if (mode != NULL) {
         wlr_output_state_set_mode(&state, mode);
     }
 
@@ -81,7 +75,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
     wlr_output_state_finish(&state);
 
     /* Allocates and configures our state for this output */
-    struct hwc_output *output = calloc(1, sizeof(struct hwc_output));
+    struct hwc_output *output = calloc(1, sizeof(*output));
     assert(output);
     output->wlr_output = wlr_output;
     output->server = server;
@@ -113,34 +107,6 @@ static void server_new_output(struct wl_listener *listener, void *data) {
         server->output_layout,
         wlr_output
     );
-
-	if (!l_output) {
-		wlr_log(WLR_ERROR, "%s", "Could not add an output layout.");
-		return;
-	}
-
-	struct wlr_output_configuration_v1 *configuration = wlr_output_configuration_v1_create();
-	wlr_output_configuration_head_v1_create(configuration, wlr_output);
-	wlr_output_manager_v1_set_configuration(server->output_manager, configuration);
-
     struct wlr_scene_output *scene_output = wlr_scene_output_create(server->scene, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_layout, l_output, scene_output);
-}
-
-static void output_configuration_applied(struct wl_listener *listener, void *data) {
-    struct hwc_server *server = wl_container_of(listener, server, output_manager);
-    struct wlr_output_configuration_v1 *configuration = data;
-    wlr_output_configuration_v1_send_succeeded(configuration);
-}
-
-void init_outputs(struct hwc_server *server) {
-    /* Configure a listener to be notified when new outputs are available on the backend. */
-    wl_list_init(&server->outputs);
-    server->new_output.notify = server_new_output;
-    wl_signal_add(&server->backend->events.new_output, &server->new_output);
-
-    server->output_manager = wlr_output_manager_v1_create(server->wl_display);
-    server->output_configuration_applied.notify = output_configuration_applied;
-    wl_signal_add(&server->output_manager->events.apply, &server->output_configuration_applied);
-    wl_signal_add(&server->output_manager->events.test, &server->output_configuration_applied);
 }
