@@ -8,8 +8,9 @@
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/util/edges.h>
 
-#include "server.h"
-#include "toplevel.h"
+#include "xdgshell.h"
+#include "types/server.h"
+#include "types/toplevel.h"
 
 void server_new_pointer(struct hwc_server *server, struct wlr_input_device *device) {
     /* We don't do anything special with pointers. All of our pointer handling
@@ -18,6 +19,7 @@ void server_new_pointer(struct hwc_server *server, struct wlr_input_device *devi
      * acceleration, etc. */
     wlr_cursor_attach_input_device(server->cursor, device);
 }
+
 void seat_request_cursor(struct wl_listener *listener, void *data) {
     struct hwc_server *server = wl_container_of(listener, server, request_cursor);
     /* This event is raised by the seat when a client provides a cursor image */
@@ -55,7 +57,7 @@ void reset_cursor_mode(struct hwc_server *server) {
     server->grabbed_toplevel = NULL;
 }
 
-void process_cursor_move(struct hwc_server *server, uint32_t time) {
+static void process_cursor_move(struct hwc_server *server, uint32_t time) {
     /* Move the grabbed toplevel to the new position. */
     struct hwc_toplevel *toplevel = server->grabbed_toplevel;
     wlr_scene_node_set_position(
@@ -65,7 +67,7 @@ void process_cursor_move(struct hwc_server *server, uint32_t time) {
     );
 }
 
-void process_cursor_resize(struct hwc_server *server, uint32_t time) {
+static void process_cursor_resize(struct hwc_server *server, uint32_t time) {
     /*
      * Resizing the grabbed toplevel can be a little bit complicated, because we
      * could be resizing from any corner or edge. This not only resizes the
@@ -120,7 +122,7 @@ void process_cursor_resize(struct hwc_server *server, uint32_t time) {
     wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, new_width, new_height);
 }
 
-void process_cursor_motion(struct hwc_server *server, uint32_t time) {
+static void process_cursor_motion(struct hwc_server *server, uint32_t time) {
     /* If the mode is non-passthrough, delegate to those functions. */
     if (server->cursor_mode == HWC_CURSOR_MOVE) {
         process_cursor_move(server, time);
@@ -169,7 +171,7 @@ void process_cursor_motion(struct hwc_server *server, uint32_t time) {
     }
 }
 
-void server_cursor_motion(struct wl_listener *listener, void *data) {
+static void server_cursor_motion(struct wl_listener *listener, void *data) {
     /* This event is forwarded by the cursor when a pointer emits a _relative_
      * pointer motion event (i.e. a delta) */
     struct hwc_server *server = wl_container_of(listener, server, cursor_motion);
@@ -188,7 +190,7 @@ void server_cursor_motion(struct wl_listener *listener, void *data) {
     process_cursor_motion(server, event->time_msec);
 }
 
-void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
+static void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
     /* This event is forwarded by the cursor when a pointer emits an _absolute_
      * motion event, from 0..1 on each axis. This happens, for example, when
      * wlroots is running under a Wayland window rather than KMS+DRM, and you
@@ -201,7 +203,7 @@ void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
     process_cursor_motion(server, event->time_msec);
 }
 
-void server_cursor_button(struct wl_listener *listener, void *data) {
+static void server_cursor_button(struct wl_listener *listener, void *data) {
     /* This event is forwarded by the cursor when a pointer emits a button
      * event. */
     struct hwc_server *server = wl_container_of(listener, server, cursor_button);
@@ -222,7 +224,7 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
     }
 }
 
-void server_cursor_axis(struct wl_listener *listener, void *data) {
+static void server_cursor_axis(struct wl_listener *listener, void *data) {
     /* This event is forwarded by the cursor when a pointer emits an axis event,
      * for example when you move the scroll wheel. */
     struct hwc_server *server = wl_container_of(listener, server, cursor_axis);
@@ -239,7 +241,7 @@ void server_cursor_axis(struct wl_listener *listener, void *data) {
     );
 }
 
-void server_cursor_frame(struct wl_listener *listener, void *data) {
+static void server_cursor_frame(struct wl_listener *listener, void *data) {
     /* This event is forwarded by the cursor when a pointer emits an frame
      * event. Frame events are sent after regular pointer events to group
      * multiple events together. For instance, two axis events may happen at the
@@ -247,4 +249,40 @@ void server_cursor_frame(struct wl_listener *listener, void *data) {
     struct hwc_server *server = wl_container_of(listener, server, cursor_frame);
     /* Notify the client with pointer focus of the frame event. */
     wlr_seat_pointer_notify_frame(server->seat);
+}
+
+
+void init_cursor(struct hwc_server *server) {
+    /* Creates a cursor, which is a wlroots utility for tracking the cursor
+     * image shown on screen. */
+    server->cursor = wlr_cursor_create();
+    wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
+
+    /* Creates an xcursor manager, another wlroots utility which loads up
+     * Xcursor themes to source cursor images from and makes sure that cursor
+     * images are available at all scale factors on the screen (necessary for
+     * HiDPI support). */
+    server->cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
+
+    /*
+     * wlr_cursor *only* displays an image on screen. It does not move around
+     * when the pointer moves. However, we can attach input devices to it, and
+     * it will generate aggregate events for all of them. In these events, we
+     * can choose how we want to process them, forwarding them to clients and
+     * moving the cursor around. More detail on this process is described in
+     * https://drewdevault.com/2018/07/17/Input-handling-in-wlroots.html.
+     *
+     * And more comments are sprinkled throughout the notify functions above.
+     */
+    server->cursor_mode = HWC_CURSOR_PASSTHROUGH;
+    server->cursor_motion.notify = server_cursor_motion;
+    wl_signal_add(&server->cursor->events.motion, &server->cursor_motion);
+    server->cursor_motion_absolute.notify = server_cursor_motion_absolute;
+    wl_signal_add(&server->cursor->events.motion_absolute, &server->cursor_motion_absolute);
+    server->cursor_button.notify = server_cursor_button;
+    wl_signal_add(&server->cursor->events.button, &server->cursor_button);
+    server->cursor_axis.notify = server_cursor_axis;
+    wl_signal_add(&server->cursor->events.axis, &server->cursor_axis);
+    server->cursor_frame.notify = server_cursor_frame;
+    wl_signal_add(&server->cursor->events.frame, &server->cursor_frame);
 }

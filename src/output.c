@@ -6,9 +6,10 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 
-#include "output.h"
+#include "types/server.h"
+#include "types/output.h"
 
-void output_frame(struct wl_listener *listener, void *data) {
+static void output_frame(struct wl_listener *listener, void *data) {
     /* This function is called every time an output is ready to display a frame,
      * generally at the output's refresh rate (e.g. 60Hz). */
     struct hwc_output *output = wl_container_of(listener, output, frame);
@@ -27,7 +28,7 @@ void output_frame(struct wl_listener *listener, void *data) {
     wlr_scene_output_send_frame_done(scene_output, &now);
 }
 
-void output_request_state(struct wl_listener *listener, void *data) {
+static void output_request_state(struct wl_listener *listener, void *data) {
     /* This function is called when the backend requests a new state for
      * the output. For example, Wayland and X11 backends request a new mode
      * when the output window is resized. */
@@ -36,7 +37,7 @@ void output_request_state(struct wl_listener *listener, void *data) {
     wlr_output_commit_state(output->wlr_output, event->state);
 }
 
-void output_destroy(struct wl_listener *listener, void *data) {
+static void output_destroy(struct wl_listener *listener, void *data) {
     struct hwc_output *output = wl_container_of(listener, output, destroy);
     wl_list_remove(&output->frame.link);
     wl_list_remove(&output->request_state.link);
@@ -45,7 +46,7 @@ void output_destroy(struct wl_listener *listener, void *data) {
     free(output);
 }
 
-void server_new_output(struct wl_listener *listener, void *data) {
+static void server_new_output(struct wl_listener *listener, void *data) {
     /* This event is raised by the backend when a new output (aka a display or
      * monitor) becomes available. */
     struct hwc_server *server = wl_container_of(listener, server, new_output);
@@ -110,3 +111,24 @@ void server_new_output(struct wl_listener *listener, void *data) {
     struct wlr_scene_output *scene_output = wlr_scene_output_create(server->scene, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_layout, l_output, scene_output);
 }
+
+void init_output(struct hwc_server *server) {
+    /* Creates an output layout, which a wlroots utility for working with an
+     * arrangement of screens in a physical layout. */
+    server->output_layout = wlr_output_layout_create(server->wl_display);
+
+    /* Configure a listener to be notified when new outputs are available on the backend. */
+    wl_list_init(&server->outputs);
+    server->new_output.notify = server_new_output;
+    wl_signal_add(&server->backend->events.new_output, &server->new_output);
+
+    /* Create a scene graph. This is a wlroots abstraction that handles all
+     * rendering and damage tracking. All the compositor author needs to do
+     * is add things that should be rendered to the scene graph at the proper
+     * positions and then call wlr_scene_output_commit() to render a frame if
+     * necessary.
+     */
+    server->scene = wlr_scene_create();
+    server->scene_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
+}
+

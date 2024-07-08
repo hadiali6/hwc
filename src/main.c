@@ -25,7 +25,9 @@ static const struct option long_options[] = {
 #define DEFAULT_HWC_CONFIG_PATH "~/.config/hwc/conifg"
 #define HWC_VERSION "0.01-alpha"
 
-#include "init.h"
+#include "compositor.h"
+#include "types/compositor.h"
+#include "types/server.h"
 
 static void hwc_set_verbosity(
     enum wlr_log_importance *verbosity,
@@ -47,6 +49,7 @@ static void hwc_set_verbosity(
 int main(int argc, char *argv[]) {
     char *startup_cmd = NULL;
     char *config_path = DEFAULT_HWC_CONFIG_PATH;
+
 #ifdef DEBUG
     enum wlr_log_importance verbosity = WLR_DEBUG;
 #else
@@ -70,9 +73,12 @@ int main(int argc, char *argv[]) {
         return EXIT_SUCCESS;
     }
     wlr_log_init(verbosity, NULL);
-    init_compositor(startup_cmd);
-    /*struct hwc_comositor comositor = { 0 };*/
-    /*init_compositor(&server);*/
-    /*start_compositor(&server);*/
+
+    struct hwc_compositor compositor = { 0 };
+
+    init_compositor(&compositor.server);
+    start_compositor(&compositor.server, startup_cmd); // starts event loop
+    destroy_compositor(&compositor.server);
+
     return EXIT_SUCCESS;
 }

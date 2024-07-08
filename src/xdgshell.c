@@ -7,9 +7,12 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_compositor.h>
 
-#include "server.h"
 #include "cursor.h"
-#include "toplevel.h"
+
+#include "types/server.h"
+#include "types/cursor.h"
+#include "types/toplevel.h"
+#include "types/popup.h"
 
 void focus_toplevel(struct hwc_toplevel *toplevel, struct wlr_surface *surface) {
     /* NOTE: this function only deals with keyboard focus. */
@@ -87,7 +90,7 @@ struct hwc_toplevel *desktop_toplevel_at(
     return tree->node.data;
 }
 
-void xdg_toplevel_map(struct wl_listener *listener, void *data) {
+static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
     /* Called when the surface is mapped, or ready to display on-screen. */
     struct hwc_toplevel *toplevel = wl_container_of(listener, toplevel, map);
 
@@ -95,7 +98,7 @@ void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 
     focus_toplevel(toplevel, toplevel->xdg_toplevel->base->surface);
 }
-void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
+static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
     /* Called when the surface is unmapped, and should no longer be shown. */
     struct hwc_toplevel *toplevel = wl_container_of(listener, toplevel, unmap);
 
@@ -106,7 +109,7 @@ void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 
     wl_list_remove(&toplevel->link);
 }
-void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
+static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
     /* Called when the xdg_toplevel is destroyed. */
     struct hwc_toplevel *toplevel = wl_container_of(listener, toplevel, destroy);
 
@@ -122,7 +125,7 @@ void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
     free(toplevel);
 }
 
-void begin_interactive(
+static void begin_interactive(
     struct hwc_toplevel *toplevel,
     enum hwc_cursor_mode mode,
     uint32_t edges
@@ -161,7 +164,7 @@ void begin_interactive(
     }
 }
 
-void xdg_toplevel_request_move(struct wl_listener *listener, void *data) {
+static void xdg_toplevel_request_move(struct wl_listener *listener, void *data) {
     /* This event is raised when a client would like to begin an interactive
      * move, typically because the user clicked on their client-side
      * decorations. Note that a more sophisticated compositor should check the
@@ -171,7 +174,7 @@ void xdg_toplevel_request_move(struct wl_listener *listener, void *data) {
     begin_interactive(toplevel, HWC_CURSOR_MOVE, 0);
 }
 
-void xdg_toplevel_request_resize(struct wl_listener *listener, void *data) {
+static void xdg_toplevel_request_resize(struct wl_listener *listener, void *data) {
     /* This event is raised when a client would like to begin an interactive
      * resize, typically because the user clicked on their client-side
      * decorations. Note that a more sophisticated compositor should check the
@@ -182,7 +185,7 @@ void xdg_toplevel_request_resize(struct wl_listener *listener, void *data) {
     begin_interactive(toplevel, HWC_CURSOR_RESIZE, event->edges);
 }
 
-void xdg_toplevel_request_maximize(struct wl_listener *listener, void *data) {
+static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *data) {
     /* This event is raised when a client would like to maximize itself,
      * typically because the user clicked on the maximize button on client-side
      * decorations. hwc doesn't support maximization, but to conform to
@@ -196,7 +199,7 @@ void xdg_toplevel_request_maximize(struct wl_listener *listener, void *data) {
     }
 }
 
-void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
+static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
     /* Just as with request_maximize, we must send a configure here. */
     struct hwc_toplevel *toplevel = wl_container_of(listener, toplevel, request_fullscreen);
     if (toplevel->xdg_toplevel->base->initialized) {
@@ -217,17 +220,20 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
     }
 }
 
-void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
+static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     /* This event is raised when a client creates a new toplevel (application window). */
     struct hwc_server *server = wl_container_of(listener, server, new_xdg_toplevel);
     struct wlr_xdg_toplevel *xdg_toplevel = data;
 
     /* Allocate a hwc_toplevel for this surface */
-    struct hwc_toplevel *toplevel = calloc(1, sizeof(*toplevel));
+    struct hwc_toplevel *toplevel = calloc(1, sizeof(struct hwc_toplevel));
     assert(toplevel);
     toplevel->server = server;
     toplevel->xdg_toplevel = xdg_toplevel;
-    toplevel->scene_tree = wlr_scene_xdg_surface_create(&toplevel->server->scene->tree, xdg_toplevel->base);
+    toplevel->scene_tree = wlr_scene_xdg_surface_create(
+        &toplevel->server->scene->tree,
+        xdg_toplevel->base
+    );
     toplevel->scene_tree->node.data = toplevel;
     xdg_toplevel->base->data = toplevel->scene_tree;
 
@@ -270,18 +276,16 @@ static void xdg_popup_commit(struct wl_listener *listener, void *data) {
 static void xdg_popup_destroy(struct wl_listener *listener, void *data) {
     /* Called when the xdg_popup is destroyed. */
     struct hwc_popup *popup = wl_container_of(listener, popup, destroy);
-
     wl_list_remove(&popup->commit.link);
     wl_list_remove(&popup->destroy.link);
-
     free(popup);
 }
 
-void server_new_xdg_popup(struct wl_listener *listener, void *data) {
+static void server_new_xdg_popup(struct wl_listener *listener, void *data) {
     /* This event is raised when a client creates a new popup. */
     struct wlr_xdg_popup *xdg_popup = data;
 
-    struct hwc_popup *popup = calloc(1, sizeof(*popup));
+    struct hwc_popup *popup = calloc(1, sizeof(struct hwc_popup));
     assert(popup);
     popup->xdg_popup = xdg_popup;
 
@@ -300,4 +304,17 @@ void server_new_xdg_popup(struct wl_listener *listener, void *data) {
 
     popup->destroy.notify = xdg_popup_destroy;
     wl_signal_add(&xdg_popup->events.destroy, &popup->destroy);
+}
+
+void init_xdgshell(struct hwc_server *server) {
+    /* Set up xdg-shell version 3. The xdg-shell is a Wayland protocol which is
+     * used for application windows. For more detail on shells, refer to
+     * https://drewdevault.com/2018/07/29/Wayland-shells.html.
+     */
+    wl_list_init(&server->toplevels);
+    server->xdg_shell = wlr_xdg_shell_create(server->wl_display, 3);
+    server->new_xdg_toplevel.notify = server_new_xdg_toplevel;
+    wl_signal_add(&server->xdg_shell->events.new_toplevel, &server->new_xdg_toplevel);
+    server->new_xdg_popup.notify = server_new_xdg_popup;
+    wl_signal_add(&server->xdg_shell->events.new_popup, &server->new_xdg_popup);
 }

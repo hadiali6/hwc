@@ -1,5 +1,5 @@
-#ifndef SERVER_H
-#define SERVER_H
+#ifndef SERVER_T_H
+#define SERVER_T_H
 
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
@@ -15,11 +15,7 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/box.h>
 
-enum hwc_cursor_mode {
-    HWC_CURSOR_PASSTHROUGH,
-    HWC_CURSOR_MOVE,
-    HWC_CURSOR_RESIZE,
-};
+#include "cursor.h"
 
 struct hwc_server {
     struct wl_display *wl_display;
@@ -58,7 +54,5 @@ struct hwc_server {
     struct wl_listener new_output;
 };
 
-void server_new_input(struct wl_listener *listener, void *data);
-void server_new_xdg_surface(struct wl_listener *listener, void *data);
+#endif /* end of include guard: SERVER_T_H */
 
-#endif /* end of include guard: SERVER_H */

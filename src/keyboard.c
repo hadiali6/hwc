@@ -7,8 +7,9 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_keyboard.h>
 
-#include "keyboard.h"
-#include "toplevel.h"
+#include "xdgshell.h"
+#include "types/keyboard.h"
+#include "types/server.h"
 
 void keyboard_handle_modifiers(struct wl_listener *listener, void *data) {
     /* This event is raised when a modifier key, such as shift or alt, is
@@ -106,7 +107,7 @@ void server_new_keyboard(
 ) {
     struct wlr_keyboard *wlr_keyboard = wlr_keyboard_from_input_device(device);
 
-    struct hwc_keyboard *keyboard = calloc(1, sizeof(*keyboard));
+    struct hwc_keyboard *keyboard = calloc(1, sizeof(struct hwc_keyboard));
     assert(keyboard);
     keyboard->server = server;
     keyboard->wlr_keyboard = wlr_keyboard;
