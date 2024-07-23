@@ -1,11 +1,12 @@
 # hwc
-Hadi's Wayland Compositor
+Hadi's Wayland Compositor (zig)
 
 # build
-run: `make`
+`zig build`
 
 # run
-`./build/hwc`
+`zig build run -- <arg command>`
+
 
 # binds
 `Alt+Escape`: Terminate the compositor

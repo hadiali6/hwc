@@ -1,5 +1,2 @@
-build
-.cache
-*.json
-*-protocol.c
-*-protocol.h
+.zig-cache/
+zig-out/
