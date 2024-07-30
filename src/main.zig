@@ -3,7 +3,7 @@ const Server = @import("server.zig").Server;
 
 const wlr = @import("wlroots");
 
-const version = "0.01-alpha";
+const hwc_version = "0.01-alpha";
 const default_hwc_config_path = "~/.config/hwc/config";
 
 const ArgsError = error{
@@ -19,18 +19,21 @@ const Exit = enum(u1) {
     failure = 1,
 };
 
-const LongArgCase = enum {
-    help,
-    config,
-    startup,
-    version,
-    verbosity,
+const ArgCase = enum {
+    @"-c",
+    @"--config",
+    @"-h",
+    @"--help",
+    @"-s",
+    @"--startup",
+    @"-v",
+    @"--version",
+    @"-V",
+    @"--verbosity",
     none,
 };
 
-const ShortArgCase = enum { h, c, s, v, V, none };
-
-const help =
+const help_message =
     \\Usage: {s} [options]
     \\Options:
     \\-v --version                      Display version.
@@ -41,32 +44,84 @@ const help =
     \\
 ;
 
+const FlagHandler = struct {
+    fn wrong(binary: []const u8) void {
+        std.debug.print(help_message, .{binary});
+        std.process.exit(@intFromEnum(Exit.failure));
+    }
+
+    fn help(binary: []const u8) void {
+        std.debug.print(help_message, .{binary});
+        std.process.exit(@intFromEnum(Exit.success));
+    }
+
+    fn version() void {
+        std.debug.print(".{s}\n", .{hwc_version});
+        std.process.exit(@intFromEnum(Exit.success));
+    }
+
+    fn config(args: *std.process.ArgIterator) ArgsError!void {
+        const next_arg = args.next() orelse "-";
+        if (std.mem.startsWith(u8, next_arg, "-")) {
+            return ArgsError.InvalidArgs;
+        }
+        std.log.info("Config path set to {s}", .{next_arg});
+    }
+
+    fn startup(
+        args: *std.process.ArgIterator,
+        cmd: *[]const u8,
+    ) ArgsError!void {
+        const next_arg = args.next() orelse "-";
+        if (std.mem.startsWith(u8, next_arg, "-")) {
+            return ArgsError.InvalidArgs;
+        }
+        std.log.info("Startup command set to {s}", .{next_arg});
+        cmd.* = next_arg;
+    }
+
+    fn verbosity(
+        args: *std.process.ArgIterator,
+        verbosity_value: *wlr.log.Importance,
+    ) ArgsError!void {
+        const next_arg = args.next() orelse "-";
+        if (std.mem.startsWith(u8, next_arg, "-")) {
+            return ArgsError.InvalidArgs;
+        }
+        const level = std.fmt.parseInt(u8, next_arg, 10) catch {
+            std.log.err(
+                "Failed to parse verbosity level! Setting verbosity to {d}",
+                .{@intFromEnum(verbosity_value.*)},
+            );
+            return;
+        };
+        switch (level) {
+            0 => verbosity_value.* = wlr.log.Importance.silent,
+            1 => verbosity_value.* = wlr.log.Importance.err,
+            2 => verbosity_value.* = wlr.log.Importance.info,
+            3 => verbosity_value.* = wlr.log.Importance.debug,
+            else => return ArgsError.InvalidVerbosityLevel,
+        }
+        std.log.info("Wlr Log Verbosity set to {d}", .{@intFromEnum(verbosity_value.*)});
+    }
+};
+
 pub fn main() anyerror!void {
     var verbosity: wlr.log.Importance = .silent;
     var cmd: []const u8 = undefined;
 
     var args = std.process.args();
-    const binary = args.next();
+    const binary_path = args.next();
     while (args.next()) |arg| {
-        if (std.mem.startsWith(u8, arg, "--")) {
-            const flag = std.meta.stringToEnum(LongArgCase, arg[2..]);
-            switch (flag orelse LongArgCase.none) {
-                .help => handleHelpFlag(binary.?),
-                .version => handleVersionFlag(),
-                .config => try handleConfigFlag(&args, arg),
-                .startup => try handleStartupFlag(&args, arg, &cmd),
-                .verbosity => try handleVerbosityFlag(&args, arg, &verbosity),
-                else => handleWrongFlag(binary.?),
-            }
-        } else if (std.mem.startsWith(u8, arg, "-")) {
-            const flag = std.meta.stringToEnum(ShortArgCase, arg[1..]);
-            switch (flag orelse ShortArgCase.none) {
-                .h => handleHelpFlag(binary.?),
-                .v => handleVersionFlag(),
-                .c => try handleConfigFlag(&args, arg),
-                .s => try handleStartupFlag(&args, arg, &cmd),
-                .V => try handleVerbosityFlag(&args, arg, &verbosity),
-                else => handleWrongFlag(binary.?),
+        if (std.mem.startsWith(u8, arg, "--") or std.mem.startsWith(u8, arg, "-")) {
+            const flag = std.meta.stringToEnum(ArgCase, arg[0..]);
+            switch (flag orelse ArgCase.none) {
+                .@"-h", .@"--help" => FlagHandler.help(binary_path.?),
+                .@"-v", .@"--version" => FlagHandler.version(),
+                .@"-c", .@"--config" => try FlagHandler.config(&args),
+                .@"-s", .@"--startup" => try FlagHandler.startup(&args, &cmd),
+                .@"-V", .@"--verbosity" => try FlagHandler.verbosity(&args, &verbosity),
+                else => FlagHandler.wrong(binary_path.?),
             }
         }
     }
@@ -98,69 +153,4 @@ pub fn main() anyerror!void {
 
     std.log.info("Running compositor on WAYLAND_DISPLAY={s}\n", .{socket});
     server.wl_server.run();
-}
-
-fn handleWrongFlag(binary: []const u8) void {
-    std.debug.print(help, .{binary});
-    std.process.exit(@intFromEnum(Exit.failure));
-}
-
-fn handleHelpFlag(binary: []const u8) void {
-    std.debug.print(help, .{binary});
-    std.process.exit(@intFromEnum(Exit.success));
-}
-
-fn handleVersionFlag() void {
-    std.debug.print(".{s}\n", .{version});
-    std.process.exit(@intFromEnum(Exit.success));
-}
-
-fn handleConfigFlag(
-    args: *std.process.ArgIterator,
-    arg: []const u8,
-) ArgsError!void {
-    const next_arg = args.next() orelse "--";
-    if (!std.mem.startsWith(u8, arg, "--")) {
-        return ArgsError.InvalidArgs;
-    }
-    std.log.info("Config path set to {s}", .{next_arg});
-}
-
-fn handleStartupFlag(
-    args: *std.process.ArgIterator,
-    arg: []const u8,
-    cmd: *[]const u8,
-) ArgsError!void {
-    const next_arg = args.next() orelse "--";
-    if (!std.mem.startsWith(u8, arg, "--")) {
-        return ArgsError.InvalidArgs;
-    }
-    std.log.info("Startup command set to {s}", .{next_arg});
-    cmd.* = next_arg;
-}
-
-fn handleVerbosityFlag(
-    args: *std.process.ArgIterator,
-    arg: []const u8,
-    verbosity: *wlr.log.Importance,
-) ArgsError!void {
-    const next_arg = args.next() orelse "--";
-    if (!std.mem.startsWith(u8, arg, "--")) {
-        return ArgsError.InvalidArgs;
-    }
-    const level = std.fmt.parseInt(u8, next_arg, 10) catch {
-        std.log.err(
-            "Failed to parse verbosity level! Setting verbosity to {d}",
-            .{@intFromEnum(verbosity.*)},
-        );
-        return;
-    };
-    switch (level) {
-        0 => verbosity.* = wlr.log.Importance.silent,
-        1 => verbosity.* = wlr.log.Importance.err,
-        2 => verbosity.* = wlr.log.Importance.info,
-        3 => verbosity.* = wlr.log.Importance.debug,
-        else => return ArgsError.InvalidVerbosityLevel,
-    }
-    std.log.info("Wlr Log Verbosity set to {d}", .{@intFromEnum(verbosity.*)});
 }
