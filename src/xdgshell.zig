@@ -35,7 +35,7 @@ pub const Toplevel = struct {
     fn map(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("map", listener);
         toplevel.server.toplevels.prepend(toplevel);
-        toplevel.server.focusView(toplevel, toplevel.xdg_toplevel.base.surface);
+        toplevel.server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
     }
 
     fn unmap(listener: *wl.Listener(void)) void {
@@ -62,10 +62,10 @@ pub const Toplevel = struct {
     ) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_move", listener);
         const server = toplevel.server;
-        server.grabbed_view = toplevel;
-        server.cursor_mode = .move;
-        server.grab_x = server.cursor.x - @as(f64, @floatFromInt(toplevel.x));
-        server.grab_y = server.cursor.y - @as(f64, @floatFromInt(toplevel.y));
+        server.cursor.grabbed_toplevel = toplevel;
+        server.cursor.mode = .move;
+        server.cursor.grab_x = server.cursor.wlr_cursor.x - @as(f64, @floatFromInt(toplevel.x));
+        server.cursor.grab_y = server.cursor.wlr_cursor.y - @as(f64, @floatFromInt(toplevel.y));
     }
 
     fn requestResize(
@@ -75,21 +75,21 @@ pub const Toplevel = struct {
         const toplevel: *Toplevel = @fieldParentPtr("request_resize", listener);
         const server = toplevel.server;
 
-        server.grabbed_view = toplevel;
-        server.cursor_mode = .resize;
-        server.resize_edges = event.edges;
+        server.cursor.grabbed_toplevel = toplevel;
+        server.cursor.mode = .resize;
+        server.cursor.resize_edges = event.edges;
 
         var box: wlr.Box = undefined;
         toplevel.xdg_toplevel.base.getGeometry(&box);
 
         const border_x = toplevel.x + box.x + if (event.edges.right) box.width else 0;
         const border_y = toplevel.y + box.y + if (event.edges.bottom) box.height else 0;
-        server.grab_x = server.cursor.x - @as(f64, @floatFromInt(border_x));
-        server.grab_y = server.cursor.y - @as(f64, @floatFromInt(border_y));
+        server.cursor.grab_x = server.cursor.wlr_cursor.x - @as(f64, @floatFromInt(border_x));
+        server.cursor.grab_y = server.cursor.wlr_cursor.y - @as(f64, @floatFromInt(border_y));
 
-        server.grab_box = box;
-        server.grab_box.x += toplevel.x;
-        server.grab_box.y += toplevel.y;
+        server.cursor.grab_box = box;
+        server.cursor.grab_box.x += toplevel.x;
+        server.cursor.grab_box.y += toplevel.y;
     }
 };
 

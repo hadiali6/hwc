@@ -3,6 +3,8 @@ const Server = @import("server.zig").Server;
 
 const wlr = @import("wlroots");
 
+const gpa = std.heap.c_allocator;
+
 const hwc_version = "0.01-alpha";
 const default_hwc_config_path = "~/.config/hwc/config";
 
@@ -11,8 +13,6 @@ const ArgsError = error{
     InvalidConfigPath,
     InvalidArgs,
 };
-
-const gpa = std.heap.c_allocator;
 
 const Exit = enum(u1) {
     success = 0,

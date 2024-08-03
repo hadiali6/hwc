@@ -10,6 +10,7 @@ const Toplevel = xdgshell.Toplevel;
 const Popup = xdgshell.Popup;
 const Keyboard = @import("keyboard.zig").Keyboard;
 const Output = @import("output.zig").Output;
+const Cursor = @import("cursor.zig").Cursor;
 
 const gpa = std.heap.c_allocator;
 
@@ -41,25 +42,8 @@ pub const Server = struct {
         wl.Listener(*wlr.Seat.event.RequestSetSelection).init(requestSetSelection),
     keyboards: wl.list.Head(Keyboard, .link) = undefined,
 
-    cursor: *wlr.Cursor,
-    cursor_manager: *wlr.XcursorManager,
-    cursor_motion: wl.Listener(*wlr.Pointer.event.Motion) =
-        wl.Listener(*wlr.Pointer.event.Motion).init(cursorMotion),
-    cursor_motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) =
-        wl.Listener(*wlr.Pointer.event.MotionAbsolute).init(cursorMotionAbsolute),
-    cursor_button: wl.Listener(*wlr.Pointer.event.Button) =
-        wl.Listener(*wlr.Pointer.event.Button).init(cursorButton),
-    cursor_axis: wl.Listener(*wlr.Pointer.event.Axis) =
-        wl.Listener(*wlr.Pointer.event.Axis).init(cursorAxis),
-    cursor_frame: wl.Listener(*wlr.Cursor) =
-        wl.Listener(*wlr.Cursor).init(cursorFrame),
-
-    cursor_mode: enum { passthrough, move, resize } = .passthrough,
-    grabbed_view: ?*Toplevel = null,
-    grab_x: f64 = 0,
-    grab_y: f64 = 0,
-    grab_box: wlr.Box = undefined,
-    resize_edges: wlr.Edges = .{},
+    // cursor: *wlr.Cursor,
+    cursor: Cursor,
 
     pub fn init(self: *Server) !void {
         const wl_server = try wl.Server.create();
@@ -78,9 +62,9 @@ pub const Server = struct {
             .scene_output_layout = try scene.attachOutputLayout(output_layout),
             .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
             .seat = try wlr.Seat.create(wl_server, "default"),
-            .cursor = try wlr.Cursor.create(),
-            .cursor_manager = try wlr.XcursorManager.create(null, 24),
+            .cursor = undefined,
         };
+        try self.cursor.init(self);
 
         try self.renderer.initServer(wl_server);
 
@@ -98,17 +82,10 @@ pub const Server = struct {
         self.seat.events.request_set_cursor.add(&self.request_set_cursor);
         self.seat.events.request_set_selection.add(&self.request_set_selection);
         self.keyboards.init();
-
-        self.cursor.attachOutputLayout(self.output_layout);
-        try self.cursor_manager.load(1);
-        self.cursor.events.motion.add(&self.cursor_motion);
-        self.cursor.events.motion_absolute.add(&self.cursor_motion_absolute);
-        self.cursor.events.button.add(&self.cursor_button);
-        self.cursor.events.axis.add(&self.cursor_axis);
-        self.cursor.events.frame.add(&self.cursor_frame);
     }
 
     pub fn deinit(self: *Server) void {
+        self.cursor.deinit();
         self.wl_server.destroyClients();
         self.wl_server.destroy();
     }
@@ -201,14 +178,14 @@ pub const Server = struct {
         xdg_popup.events.destroy.add(&popup.destroy);
     }
 
-    const ViewAtResult = struct {
+    const ToplevelAtResult = struct {
         toplevel: *Toplevel,
         surface: *wlr.Surface,
         sx: f64,
         sy: f64,
     };
 
-    fn viewAt(self: *Server, lx: f64, ly: f64) ?ViewAtResult {
+    pub fn toplevelAt(self: *Server, lx: f64, ly: f64) ?ToplevelAtResult {
         var sx: f64 = undefined;
         var sy: f64 = undefined;
         if (self.scene.tree.node.at(lx, ly, &sx, &sy)) |node| {
@@ -219,7 +196,7 @@ pub const Server = struct {
             var it: ?*wlr.SceneTree = node.parent;
             while (it) |n| : (it = n.node.parent) {
                 if (@as(?*Toplevel, @ptrFromInt(n.node.data))) |toplevel| {
-                    return ViewAtResult{
+                    return ToplevelAtResult{
                         .toplevel = toplevel,
                         .surface = scene_surface.surface,
                         .sx = sx,
@@ -231,7 +208,7 @@ pub const Server = struct {
         return null;
     }
 
-    pub fn focusView(
+    pub fn focusToplevel(
         self: *Server,
         toplevel: *Toplevel,
         surface: *wlr.Surface,
@@ -267,7 +244,7 @@ pub const Server = struct {
                 std.log.err("failed to create keyboard: {}", .{err});
                 return;
             },
-            .pointer => server.cursor.attachInputDevice(device),
+            .pointer => server.cursor.wlr_cursor.attachInputDevice(device),
             else => {},
         }
 
@@ -283,7 +260,11 @@ pub const Server = struct {
     ) void {
         const server: *Server = @fieldParentPtr("request_set_cursor", listener);
         if (event.seat_client == server.seat.pointer_state.focused_client)
-            server.cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
+            server.cursor.wlr_cursor.setSurface(
+                event.surface,
+                event.hotspot_x,
+                event.hotspot_y,
+            );
     }
 
     fn requestSetSelection(
@@ -292,115 +273,6 @@ pub const Server = struct {
     ) void {
         const server: *Server = @fieldParentPtr("request_set_selection", listener);
         server.seat.setSelection(event.source, event.serial);
-    }
-
-    fn cursorMotion(
-        listener: *wl.Listener(*wlr.Pointer.event.Motion),
-        event: *wlr.Pointer.event.Motion,
-    ) void {
-        const server: *Server = @fieldParentPtr("cursor_motion", listener);
-        server.cursor.move(event.device, event.delta_x, event.delta_y);
-        server.processCursorMotion(event.time_msec);
-    }
-
-    fn cursorMotionAbsolute(
-        listener: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
-        event: *wlr.Pointer.event.MotionAbsolute,
-    ) void {
-        const server: *Server = @fieldParentPtr("cursor_motion_absolute", listener);
-        server.cursor.warpAbsolute(event.device, event.x, event.y);
-        server.processCursorMotion(event.time_msec);
-    }
-
-    fn processCursorMotion(self: *Server, time_msec: u32) void {
-        switch (self.cursor_mode) {
-            .passthrough => if (self.viewAt(self.cursor.x, self.cursor.y)) |res| {
-                self.seat.pointerNotifyEnter(res.surface, res.sx, res.sy);
-                self.seat.pointerNotifyMotion(time_msec, res.sx, res.sy);
-            } else {
-                self.cursor.setXcursor(self.cursor_manager, "default");
-                self.seat.pointerClearFocus();
-            },
-            .move => {
-                const toplevel = self.grabbed_view.?;
-                toplevel.x = @as(i32, @intFromFloat(self.cursor.x - self.grab_x));
-                toplevel.y = @as(i32, @intFromFloat(self.cursor.y - self.grab_y));
-                toplevel.scene_tree.node.setPosition(toplevel.x, toplevel.y);
-            },
-            .resize => {
-                const toplevel = self.grabbed_view.?;
-                const border_x = @as(i32, @intFromFloat(self.cursor.x - self.grab_x));
-                const border_y = @as(i32, @intFromFloat(self.cursor.y - self.grab_y));
-
-                var new_left = self.grab_box.x;
-                var new_right = self.grab_box.x + self.grab_box.width;
-                var new_top = self.grab_box.y;
-                var new_bottom = self.grab_box.y + self.grab_box.height;
-
-                if (self.resize_edges.top) {
-                    new_top = border_y;
-                    if (new_top >= new_bottom)
-                        new_top = new_bottom - 1;
-                } else if (self.resize_edges.bottom) {
-                    new_bottom = border_y;
-                    if (new_bottom <= new_top)
-                        new_bottom = new_top + 1;
-                }
-
-                if (self.resize_edges.left) {
-                    new_left = border_x;
-                    if (new_left >= new_right)
-                        new_left = new_right - 1;
-                } else if (self.resize_edges.right) {
-                    new_right = border_x;
-                    if (new_right <= new_left)
-                        new_right = new_left + 1;
-                }
-
-                var geo_box: wlr.Box = undefined;
-                toplevel.xdg_toplevel.base.getGeometry(&geo_box);
-                toplevel.x = new_left - geo_box.x;
-                toplevel.y = new_top - geo_box.y;
-                toplevel.scene_tree.node.setPosition(toplevel.x, toplevel.y);
-
-                const new_width = new_right - new_left;
-                const new_height = new_bottom - new_top;
-                _ = toplevel.xdg_toplevel.setSize(new_width, new_height);
-            },
-        }
-    }
-
-    fn cursorButton(
-        listener: *wl.Listener(*wlr.Pointer.event.Button),
-        event: *wlr.Pointer.event.Button,
-    ) void {
-        const server: *Server = @fieldParentPtr("cursor_button", listener);
-        _ = server.seat.pointerNotifyButton(event.time_msec, event.button, event.state);
-        if (event.state == .released) {
-            server.cursor_mode = .passthrough;
-        } else if (server.viewAt(server.cursor.x, server.cursor.y)) |res| {
-            server.focusView(res.toplevel, res.surface);
-        }
-    }
-
-    fn cursorAxis(
-        listener: *wl.Listener(*wlr.Pointer.event.Axis),
-        event: *wlr.Pointer.event.Axis,
-    ) void {
-        const server: *Server = @fieldParentPtr("cursor_axis", listener);
-        server.seat.pointerNotifyAxis(
-            event.time_msec,
-            event.orientation,
-            event.delta,
-            event.delta_discrete,
-            event.source,
-            event.relative_direction,
-        );
-    }
-
-    fn cursorFrame(listener: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
-        const server: *Server = @fieldParentPtr("cursor_frame", listener);
-        server.seat.pointerNotifyFrame();
     }
 
     /// Assumes the modifier used for compositor keybinds is pressed
@@ -413,7 +285,7 @@ pub const Server = struct {
             xkb.Keysym.F1 => {
                 if (self.toplevels.length() < 2) return true;
                 const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
-                self.focusView(toplevel, toplevel.xdg_toplevel.base.surface);
+                self.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
             },
             else => return false,
         }
