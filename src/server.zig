@@ -145,6 +145,9 @@ pub const Server = struct {
         xdg_toplevel.events.destroy.add(&toplevel.destroy);
         xdg_toplevel.events.request_move.add(&toplevel.request_move);
         xdg_toplevel.events.request_resize.add(&toplevel.request_resize);
+        xdg_toplevel.events.request_minimize.add(&toplevel.request_minimize);
+        xdg_toplevel.events.request_maximize.add(&toplevel.request_maximize);
+        xdg_toplevel.events.request_fullscreen.add(&toplevel.request_fullscreen);
     }
 
     fn newXdgPopup(
@@ -286,6 +289,24 @@ pub const Server = struct {
                 if (self.toplevels.length() < 2) return true;
                 const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
                 self.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
+            },
+            xkb.Keysym.f => {
+                const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
+                if (toplevel.scene_tree.node.enabled) {
+                    toplevel.xdg_toplevel.events.request_fullscreen.emit();
+                }
+            },
+            xkb.Keysym.M => {
+                const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
+                if (toplevel.scene_tree.node.enabled) {
+                    toplevel.xdg_toplevel.events.request_maximize.emit();
+                }
+            },
+            xkb.Keysym.m => {
+                const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
+                if (toplevel.scene_tree.node.enabled) {
+                    toplevel.xdg_toplevel.events.request_minimize.emit();
+                }
             },
             else => return false,
         }

@@ -75,9 +75,9 @@ pub const Cursor = struct {
             },
             .move => {
                 const toplevel = self.grabbed_toplevel.?;
-                toplevel.x = @as(i32, @intFromFloat(self.wlr_cursor.x - self.grab_x));
-                toplevel.y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
-                toplevel.scene_tree.node.setPosition(toplevel.x, toplevel.y);
+                toplevel.geometry.x = @as(i32, @intFromFloat(self.wlr_cursor.x - self.grab_x));
+                toplevel.geometry.y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
+                toplevel.scene_tree.node.setPosition(toplevel.geometry.x, toplevel.geometry.y);
             },
             .resize => {
                 const toplevel = self.grabbed_toplevel.?;
@@ -111,9 +111,12 @@ pub const Cursor = struct {
 
                 var geo_box: wlr.Box = undefined;
                 toplevel.xdg_toplevel.base.getGeometry(&geo_box);
-                toplevel.x = new_left - geo_box.x;
-                toplevel.y = new_top - geo_box.y;
-                toplevel.scene_tree.node.setPosition(toplevel.x, toplevel.y);
+                toplevel.geometry.x = new_left - geo_box.x;
+                toplevel.geometry.y = new_top - geo_box.y;
+                toplevel.scene_tree.node.setPosition(
+                    toplevel.geometry.x,
+                    toplevel.geometry.y,
+                );
 
                 const new_width = new_right - new_left;
                 const new_height = new_bottom - new_top;

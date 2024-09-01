@@ -14,7 +14,7 @@ pub const Output = struct {
 
     frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(frame),
     request_state: wl.Listener(*wlr.Output.event.RequestState) =
-        wl.Listener(*wlr.Output.event.RequestState).init(request_state),
+        wl.Listener(*wlr.Output.event.RequestState).init(requestState),
     destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(destroy),
 
     // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
@@ -46,7 +46,7 @@ pub const Output = struct {
         scene_output.sendFrameDone(&now);
     }
 
-    fn request_state(
+    fn requestState(
         listener: *wl.Listener(*wlr.Output.event.RequestState),
         event: *wlr.Output.event.RequestState,
     ) void {
