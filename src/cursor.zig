@@ -1,11 +1,16 @@
-const wl = @import("wayland").server.wl;
+const std = @import("std");
+const wayland = @import("wayland");
+const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const Server = @import("server.zig").Server;
+// const Server = @import("server.zig").Server;
 const Toplevel = @import("xdgshell.zig").Toplevel;
 
+const server = &@import("main.zig").server;
+
+const log = std.log.scoped(.cursor);
+
 pub const Cursor = struct {
-    server: *Server,
     wlr_cursor: *wlr.Cursor,
     manager: *wlr.XcursorManager,
 
@@ -27,13 +32,12 @@ pub const Cursor = struct {
     grab_box: wlr.Box = undefined,
     resize_edges: wlr.Edges = .{},
 
-    pub fn init(self: *Cursor, server: *Server) !void {
+    pub fn init(self: *Cursor) !void {
         self.* = .{
             .wlr_cursor = try wlr.Cursor.create(),
             .manager = try wlr.XcursorManager.create(null, 24),
-            .server = server,
         };
-        self.wlr_cursor.attachOutputLayout(self.server.output_layout);
+        self.wlr_cursor.attachOutputLayout(server.output_layout);
         try self.manager.load(1);
         self.wlr_cursor.events.motion.add(&self.motion);
         self.wlr_cursor.events.motion_absolute.add(&self.motion_absolute);
@@ -66,12 +70,12 @@ pub const Cursor = struct {
 
     fn processCursorMotion(self: *Cursor, time_msec: u32) void {
         switch (self.mode) {
-            .passthrough => if (self.server.toplevelAt(self.wlr_cursor.x, self.wlr_cursor.y)) |res| {
-                self.server.seat.pointerNotifyEnter(res.surface, res.sx, res.sy);
-                self.server.seat.pointerNotifyMotion(time_msec, res.sx, res.sy);
+            .passthrough => if (server.toplevelAt(self.wlr_cursor.x, self.wlr_cursor.y)) |res| {
+                server.seat.pointerNotifyEnter(res.surface, res.sx, res.sy);
+                server.seat.pointerNotifyMotion(time_msec, res.sx, res.sy);
             } else {
                 self.wlr_cursor.setXcursor(self.manager, "default");
-                self.server.seat.pointerClearFocus();
+                server.seat.pointerClearFocus();
             },
             .move => {
                 const toplevel = self.grabbed_toplevel.?;
@@ -130,20 +134,20 @@ pub const Cursor = struct {
         event: *wlr.Pointer.event.Button,
     ) void {
         const cursor: *Cursor = @fieldParentPtr("button", listener);
-        _ = cursor.server.seat.pointerNotifyButton(event.time_msec, event.button, event.state);
+        _ = server.seat.pointerNotifyButton(event.time_msec, event.button, event.state);
         if (event.state == .released) {
             cursor.mode = .passthrough;
-        } else if (cursor.server.toplevelAt(cursor.wlr_cursor.x, cursor.wlr_cursor.y)) |res| {
-            cursor.server.focusToplevel(res.toplevel, res.surface);
+        } else if (server.toplevelAt(cursor.wlr_cursor.x, cursor.wlr_cursor.y)) |res| {
+            server.focusToplevel(res.toplevel, res.surface);
         }
     }
 
     fn cursorAxis(
-        listener: *wl.Listener(*wlr.Pointer.event.Axis),
+        _: *wl.Listener(*wlr.Pointer.event.Axis),
         event: *wlr.Pointer.event.Axis,
     ) void {
-        const cursor: *Cursor = @fieldParentPtr("axis", listener);
-        cursor.server.seat.pointerNotifyAxis(
+        // const cursor: *Cursor = @fieldParentPtr("axis", listener);
+        server.seat.pointerNotifyAxis(
             event.time_msec,
             event.orientation,
             event.delta,
@@ -153,8 +157,8 @@ pub const Cursor = struct {
         );
     }
 
-    fn cursorFrame(listener: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
-        const cursor: *Cursor = @fieldParentPtr("frame", listener);
-        cursor.server.seat.pointerNotifyFrame();
+    fn cursorFrame(_: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
+        // const cursor: *Cursor = @fieldParentPtr("frame", listener);
+        server.seat.pointerNotifyFrame();
     }
 };

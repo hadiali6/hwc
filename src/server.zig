@@ -12,6 +12,7 @@ const Keyboard = @import("keyboard.zig").Keyboard;
 const Output = @import("output.zig").Output;
 const Cursor = @import("cursor.zig").Cursor;
 
+const log = std.log.scoped(.server);
 const gpa = std.heap.c_allocator;
 
 pub const Server = struct {
@@ -64,7 +65,7 @@ pub const Server = struct {
             .seat = try wlr.Seat.create(wl_server, "default"),
             .cursor = undefined,
         };
-        try self.cursor.init(self);
+        try self.cursor.init();
 
         try self.renderer.initServer(wl_server);
 
@@ -107,7 +108,7 @@ pub const Server = struct {
         }
         if (!wlr_output.commitState(&state)) return;
 
-        Output.create(server, wlr_output) catch {
+        Output.create(wlr_output) catch {
             std.log.err("failed to allocate new output", .{});
             wlr_output.destroy();
             return;
@@ -128,7 +129,6 @@ pub const Server = struct {
         };
 
         toplevel.* = .{
-            .server = server,
             .xdg_toplevel = xdg_toplevel,
             .scene_tree = server.scene.tree.createSceneXdgSurface(xdg_surface) catch {
                 gpa.destroy(toplevel);
@@ -136,6 +136,7 @@ pub const Server = struct {
                 return;
             },
         };
+
         toplevel.scene_tree.node.data = @intFromPtr(toplevel);
         xdg_surface.data = @intFromPtr(toplevel.scene_tree);
 
@@ -243,7 +244,7 @@ pub const Server = struct {
     ) void {
         const server: *Server = @fieldParentPtr("new_input", listener);
         switch (device.type) {
-            .keyboard => Keyboard.create(server, device) catch |err| {
+            .keyboard => Keyboard.create(device) catch |err| {
                 std.log.err("failed to create keyboard: {}", .{err});
                 return;
             },

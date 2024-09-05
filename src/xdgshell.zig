@@ -1,16 +1,16 @@
 const std = @import("std");
-
-const wl = @import("wayland").server.wl;
+const wayland = @import("wayland");
+const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const Server = @import("server.zig").Server;
 const Output = @import("output.zig").Output;
-const log = std.log.scoped(.xdgshell);
 
+const server = &@import("main.zig").server;
+
+const log = std.log.scoped(.xdgshell);
 const gpa = std.heap.c_allocator;
 
 pub const Toplevel = struct {
-    server: *Server,
     link: wl.list.Link = undefined,
     xdg_toplevel: *wlr.XdgToplevel,
     scene_tree: *wlr.SceneTree,
@@ -40,8 +40,8 @@ pub const Toplevel = struct {
 
     fn map(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("map", listener);
-        toplevel.server.toplevels.prepend(toplevel);
-        toplevel.server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
+        server.toplevels.prepend(toplevel);
+        server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
 
         toplevel.xdg_toplevel.base.getGeometry(&toplevel.geometry);
         const usable_area: wlr.Box = getUsableArea(getActiveOutput(toplevel).?);
@@ -81,7 +81,6 @@ pub const Toplevel = struct {
         _: *wlr.XdgToplevel.event.Move,
     ) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_move", listener);
-        const server = toplevel.server;
         server.cursor.grabbed_toplevel = toplevel;
         server.cursor.mode = .move;
         server.cursor.grab_x = server.cursor.wlr_cursor.x -
@@ -95,7 +94,6 @@ pub const Toplevel = struct {
         event: *wlr.XdgToplevel.event.Resize,
     ) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_resize", listener);
-        const server = toplevel.server;
 
         server.cursor.grabbed_toplevel = toplevel;
         server.cursor.mode = .resize;
@@ -122,13 +120,13 @@ pub const Toplevel = struct {
             toplevel.previous_geometry = toplevel.geometry;
             toplevel.geometry.y = -toplevel.geometry.height;
             const next_toplevel: *Toplevel = @fieldParentPtr("link", toplevel.link.next.?);
-            if (toplevel.server.toplevels.length() > 1) {
-                next_toplevel.server.focusToplevel(
+            if (server.toplevels.length() > 1) {
+                server.focusToplevel(
                     next_toplevel,
                     next_toplevel.xdg_toplevel.base.surface,
                 );
             } else {
-                toplevel.server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
+                server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
             }
         } else {
             toplevel.geometry = toplevel.previous_geometry;
@@ -160,7 +158,7 @@ pub const Toplevel = struct {
         if (!is_fullscreen) {
             const wlr_output: ?*wlr.Output = getActiveOutput(toplevel);
             var output_box: wlr.Box = undefined;
-            toplevel.server.output_layout.getBox(wlr_output, &output_box);
+            server.output_layout.getBox(wlr_output, &output_box);
             toplevel.previous_geometry = toplevel.geometry;
             toplevel.geometry.x = 0;
             toplevel.geometry.y = 0;
@@ -191,14 +189,14 @@ fn getActiveOutput(toplevel: *Toplevel) ?*wlr.Output {
     const output: ?*wlr.Output = undefined;
     var geo: wlr.Box = undefined;
     toplevel.xdg_toplevel.base.getGeometry(&geo);
-    toplevel.server.output_layout.closestPoint(
+    server.output_layout.closestPoint(
         output,
         @floatFromInt(geo.x + @divTrunc(geo.width, 2)),
         @floatFromInt(geo.y + @divTrunc(geo.height, 2)),
         &closest_x,
         &closest_y,
     );
-    return toplevel.server.output_layout.outputAt(closest_x, closest_y);
+    return server.output_layout.outputAt(closest_x, closest_y);
 }
 
 pub const Popup = struct {

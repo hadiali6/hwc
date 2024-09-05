@@ -1,15 +1,14 @@
 const std = @import("std");
-const posix = std.posix;
-
-const wl = @import("wayland").server.wl;
+const wayland = @import("wayland");
+const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const Server = @import("server.zig").Server;
+const server = &@import("main.zig").server;
 
+const log = std.log.scoped(.output);
 const gpa = std.heap.c_allocator;
 
 pub const Output = struct {
-    server: *Server,
     wlr_output: *wlr.Output,
 
     frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(frame),
@@ -18,11 +17,10 @@ pub const Output = struct {
     destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(destroy),
 
     // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
-    pub fn create(server: *Server, wlr_output: *wlr.Output) !void {
+    pub fn create(wlr_output: *wlr.Output) !void {
         const output = try gpa.create(Output);
 
         output.* = .{
-            .server = server,
             .wlr_output = wlr_output,
         };
         wlr_output.events.frame.add(&output.frame);
@@ -38,11 +36,13 @@ pub const Output = struct {
     fn frame(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
         const output: *Output = @fieldParentPtr("frame", listener);
 
-        const scene_output = output.server.scene.getSceneOutput(output.wlr_output).?;
+        const scene_output = server.scene.getSceneOutput(output.wlr_output).?;
         _ = scene_output.commit(null);
 
-        var now: posix.timespec = undefined;
-        posix.clock_gettime(posix.CLOCK.MONOTONIC, &now) catch @panic("CLOCK_MONOTONIC not supported");
+        var now: std.posix.timespec = undefined;
+        std.posix.clock_gettime(std.posix.CLOCK.MONOTONIC, &now) catch {
+            @panic("CLOCK_MONOTONIC not supported");
+        };
         scene_output.sendFrameDone(&now);
     }
 

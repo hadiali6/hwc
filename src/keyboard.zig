@@ -1,14 +1,15 @@
 const std = @import("std");
-const Server = @import("server.zig").Server;
-
-const wl = @import("wayland").server.wl;
+const wayland = @import("wayland");
+const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
+const server = &@import("main.zig").server;
+
+const log = std.log.scoped(.keyboard);
 const gpa = std.heap.c_allocator;
 
 pub const Keyboard = struct {
-    server: *Server,
     link: wl.list.Link = undefined,
     device: *wlr.InputDevice,
 
@@ -17,12 +18,11 @@ pub const Keyboard = struct {
     key: wl.Listener(*wlr.Keyboard.event.Key) =
         wl.Listener(*wlr.Keyboard.event.Key).init(key),
 
-    pub fn create(server: *Server, device: *wlr.InputDevice) !void {
+    pub fn create(device: *wlr.InputDevice) !void {
         const keyboard = try gpa.create(Keyboard);
         errdefer gpa.destroy(keyboard);
 
         keyboard.* = .{
-            .server = server,
             .device = device,
         };
 
@@ -43,12 +43,12 @@ pub const Keyboard = struct {
     }
 
     fn modifiers(
-        listener: *wl.Listener(*wlr.Keyboard),
+        _: *wl.Listener(*wlr.Keyboard),
         wlr_keyboard: *wlr.Keyboard,
     ) void {
-        const keyboard: *Keyboard = @fieldParentPtr("modifiers", listener);
-        keyboard.server.seat.setKeyboard(wlr_keyboard);
-        keyboard.server.seat.keyboardNotifyModifiers(&wlr_keyboard.modifiers);
+        // const keyboard: *Keyboard = @fieldParentPtr("modifiers", listener);
+        server.seat.setKeyboard(wlr_keyboard);
+        server.seat.keyboardNotifyModifiers(&wlr_keyboard.modifiers);
     }
 
     fn key(
@@ -67,7 +67,7 @@ pub const Keyboard = struct {
         var handled = false;
         if (wlr_keyboard.getModifiers().alt and event.state == .pressed) {
             for (wlr_keyboard.xkb_state.?.keyGetSyms(keycode)) |sym| {
-                if (keyboard.server.handleKeybind(sym)) {
+                if (server.handleKeybind(sym)) {
                     handled = true;
                     break;
                 }
@@ -75,8 +75,8 @@ pub const Keyboard = struct {
         }
 
         if (!handled) {
-            keyboard.server.seat.setKeyboard(wlr_keyboard);
-            keyboard.server.seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
+            server.seat.setKeyboard(wlr_keyboard);
+            server.seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
         }
     }
 };

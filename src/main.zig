@@ -1,12 +1,16 @@
 const std = @import("std");
-const Server = @import("server.zig").Server;
-
 const wlr = @import("wlroots");
+
+const log = std.log.scoped(.main);
+
+const Server = @import("server.zig").Server;
 
 const gpa = std.heap.c_allocator;
 
 const hwc_version = "0.01-alpha";
 const default_hwc_config_path = "~/.config/hwc/config";
+
+pub var server: Server = undefined;
 
 const ArgsError = error{
     InvalidVerbosityLevel,
@@ -65,7 +69,7 @@ const FlagHandler = struct {
         if (std.mem.startsWith(u8, next_arg, "-")) {
             return ArgsError.InvalidArgs;
         }
-        std.log.info("Config path set to {s}", .{next_arg});
+        log.info("Config path set to {s}", .{next_arg});
     }
 
     fn startup(
@@ -76,7 +80,7 @@ const FlagHandler = struct {
         if (std.mem.startsWith(u8, next_arg, "-")) {
             return ArgsError.InvalidArgs;
         }
-        std.log.info("Startup command set to {s}", .{next_arg});
+        log.info("Startup command set to {s}", .{next_arg});
         cmd.* = next_arg;
     }
 
@@ -89,7 +93,7 @@ const FlagHandler = struct {
             return ArgsError.InvalidArgs;
         }
         const level = std.fmt.parseInt(u8, next_arg, 10) catch {
-            std.log.err(
+            log.err(
                 "Failed to parse verbosity level! Setting verbosity to {d}",
                 .{@intFromEnum(verbosity_value.*)},
             );
@@ -102,7 +106,7 @@ const FlagHandler = struct {
             3 => verbosity_value.* = wlr.log.Importance.debug,
             else => return ArgsError.InvalidVerbosityLevel,
         }
-        std.log.info("Wlr Log Verbosity set to {d}", .{@intFromEnum(verbosity_value.*)});
+        log.info("Wlr Log Verbosity set to {d}", .{@intFromEnum(verbosity_value.*)});
     }
 };
 
@@ -128,7 +132,6 @@ pub fn main() anyerror!void {
 
     wlr.log.init(verbosity, null);
 
-    var server: Server = undefined;
     try server.init();
     defer server.deinit();
 
@@ -151,6 +154,6 @@ pub fn main() anyerror!void {
 
     try server.backend.start();
 
-    std.log.info("Running compositor on WAYLAND_DISPLAY={s}\n", .{socket});
+    log.info("Running compositor on WAYLAND_DISPLAY={s}\n", .{socket});
     server.wl_server.run();
 }
