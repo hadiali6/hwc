@@ -3,8 +3,7 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-// const Server = @import("server.zig").Server;
-const Toplevel = @import("xdgshell.zig").Toplevel;
+const Toplevel = @import("XdgToplevel.zig").Toplevel;
 
 const server = &@import("main.zig").server;
 

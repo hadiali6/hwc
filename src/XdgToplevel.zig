@@ -3,11 +3,11 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const Output = @import("output.zig").Output;
+const Output = @import("Output.zig").Output;
 
 const server = &@import("main.zig").server;
 
-const log = std.log.scoped(.xdgshell);
+const log = std.log.scoped(.xdgtoplevel);
 const gpa = std.heap.c_allocator;
 
 pub const Toplevel = struct {
@@ -33,6 +33,7 @@ pub const Toplevel = struct {
 
     fn commit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         const toplevel: *Toplevel = @fieldParentPtr("commit", listener);
+        // log.debug("Try Commit: {*}", .{toplevel});
         if (toplevel.xdg_toplevel.base.initial_commit) {
             _ = toplevel.xdg_toplevel.setSize(0, 0);
         }
@@ -40,6 +41,7 @@ pub const Toplevel = struct {
 
     fn map(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("map", listener);
+        log.debug("Try Map: {*}", .{toplevel});
         server.toplevels.prepend(toplevel);
         server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
 
@@ -57,11 +59,13 @@ pub const Toplevel = struct {
 
     fn unmap(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("unmap", listener);
+        log.debug("Try Unmap: {*}", .{toplevel});
         toplevel.link.remove();
     }
 
     fn destroy(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("destroy", listener);
+        log.debug("Try Destroy: {*}", .{toplevel});
 
         toplevel.commit.link.remove();
         toplevel.map.link.remove();
@@ -81,6 +85,7 @@ pub const Toplevel = struct {
         _: *wlr.XdgToplevel.event.Move,
     ) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_move", listener);
+        log.debug("Try Move: {*}", .{toplevel});
         server.cursor.grabbed_toplevel = toplevel;
         server.cursor.mode = .move;
         server.cursor.grab_x = server.cursor.wlr_cursor.x -
@@ -94,6 +99,7 @@ pub const Toplevel = struct {
         event: *wlr.XdgToplevel.event.Resize,
     ) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_resize", listener);
+        log.debug("Try Resize: {*}", .{toplevel});
 
         server.cursor.grabbed_toplevel = toplevel;
         server.cursor.mode = .resize;
@@ -115,6 +121,7 @@ pub const Toplevel = struct {
     fn requestMinimize(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_minimize", listener);
         log.debug("Try Minimize: {*}", .{toplevel});
+
         const minimize_requested: bool = toplevel.xdg_toplevel.requested.minimized;
         if (minimize_requested) {
             toplevel.previous_geometry = toplevel.geometry;
@@ -136,6 +143,7 @@ pub const Toplevel = struct {
     fn requestMaximize(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_maximize", listener);
         log.debug("Try Maximize: {*}", .{toplevel});
+
         var usable_area: wlr.Box = getUsableArea(getActiveOutput(toplevel).?);
         const is_maximized: bool = toplevel.xdg_toplevel.current.maximized;
         if (!is_maximized) {
@@ -154,6 +162,7 @@ pub const Toplevel = struct {
     fn requestFullscreen(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_fullscreen", listener);
         log.debug("Try Fullscreen: {*}", .{toplevel});
+
         const is_fullscreen: bool = toplevel.xdg_toplevel.current.fullscreen;
         if (!is_fullscreen) {
             const wlr_output: ?*wlr.Output = getActiveOutput(toplevel);
@@ -198,26 +207,3 @@ fn getActiveOutput(toplevel: *Toplevel) ?*wlr.Output {
     );
     return server.output_layout.outputAt(closest_x, closest_y);
 }
-
-pub const Popup = struct {
-    xdg_popup: *wlr.XdgPopup,
-
-    commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(commit),
-    destroy: wl.Listener(void) = wl.Listener(void).init(destroy),
-
-    fn commit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
-        const popup: *Popup = @fieldParentPtr("commit", listener);
-        if (popup.xdg_popup.base.initial_commit) {
-            _ = popup.xdg_popup.base.scheduleConfigure();
-        }
-    }
-
-    fn destroy(listener: *wl.Listener(void)) void {
-        const popup: *Popup = @fieldParentPtr("destroy", listener);
-
-        popup.commit.link.remove();
-        popup.destroy.link.remove();
-
-        gpa.destroy(popup);
-    }
-};

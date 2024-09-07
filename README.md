@@ -1,5 +1,13 @@
 # hwc
-Hadi's Wayland Compositor (zig)
+Hadi's Wayland Compositor
+
+# dependencies
+libwayland
+libxkbcommon
+pixman
+wayland-protocols
+wlroots (0.18)
+libc
 
 # build
 `zig build` or to build and run `zig build run -- <args>`

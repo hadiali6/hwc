@@ -1,16 +1,10 @@
 const std = @import("std");
 const wlr = @import("wlroots");
 
+const Server = @import("Server.zig").Server;
+
 const log = std.log.scoped(.main);
-
-const Server = @import("server.zig").Server;
-
 const gpa = std.heap.c_allocator;
-
-const hwc_version = "0.01-alpha";
-const default_hwc_config_path = "~/.config/hwc/config";
-
-pub var server: Server = undefined;
 
 const ArgsError = error{
     InvalidVerbosityLevel,
@@ -37,6 +31,8 @@ const ArgCase = enum {
     none,
 };
 
+const hwc_version = "0.01-alpha";
+const default_hwc_config_path = "~/.config/hwc/config";
 const help_message =
     \\Usage: {s} [options]
     \\Options:
@@ -47,6 +43,8 @@ const help_message =
     \\-s --startup <command>            Specify a command to run at startup.
     \\
 ;
+
+pub var server: Server = undefined;
 
 const FlagHandler = struct {
     fn wrong(binary: []const u8) void {

@@ -1,16 +1,14 @@
 const std = @import("std");
-const posix = std.posix;
-
-const wl = @import("wayland").server.wl;
+const wayland = @import("wayland");
+const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
-const xdgshell = @import("xdgshell.zig");
-const Toplevel = xdgshell.Toplevel;
-const Popup = xdgshell.Popup;
-const Keyboard = @import("keyboard.zig").Keyboard;
-const Output = @import("output.zig").Output;
-const Cursor = @import("cursor.zig").Cursor;
+const Toplevel = @import("XdgToplevel.zig").Toplevel;
+const Popup = @import("XdgPopup.zig").Popup;
+const Keyboard = @import("Keyboard.zig").Keyboard;
+const Output = @import("Output.zig").Output;
+const Cursor = @import("Cursor.zig").Cursor;
 
 const log = std.log.scoped(.server);
 const gpa = std.heap.c_allocator;
@@ -43,7 +41,6 @@ pub const Server = struct {
         wl.Listener(*wlr.Seat.event.RequestSetSelection).init(requestSetSelection),
     keyboards: wl.list.Head(Keyboard, .link) = undefined,
 
-    // cursor: *wlr.Cursor,
     cursor: Cursor,
 
     pub fn init(self: *Server) !void {
@@ -291,18 +288,21 @@ pub const Server = struct {
                 const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
                 self.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
             },
+            // Set focused toplevel to fullscreen.
             xkb.Keysym.f => {
                 const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
                 if (toplevel.scene_tree.node.enabled) {
                     toplevel.xdg_toplevel.events.request_fullscreen.emit();
                 }
             },
+            // Set focused toplevel to maximized.
             xkb.Keysym.M => {
                 const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
                 if (toplevel.scene_tree.node.enabled) {
                     toplevel.xdg_toplevel.events.request_maximize.emit();
                 }
             },
+            // Set focused toplevel to minimized.
             xkb.Keysym.m => {
                 const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
                 if (toplevel.scene_tree.node.enabled) {
