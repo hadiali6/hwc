@@ -4,10 +4,11 @@ const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
+const util = @import("util.zig");
+
 const server = &@import("main.zig").server;
 
 const log = std.log.scoped(.keyboard);
-const gpa = std.heap.c_allocator;
 
 pub const Keyboard = struct {
     link: wl.list.Link = undefined,
@@ -19,8 +20,8 @@ pub const Keyboard = struct {
         wl.Listener(*wlr.Keyboard.event.Key).init(key),
 
     pub fn create(device: *wlr.InputDevice) !void {
-        const keyboard = try gpa.create(Keyboard);
-        errdefer gpa.destroy(keyboard);
+        const keyboard = try util.gpa.create(Keyboard);
+        errdefer util.gpa.destroy(keyboard);
 
         keyboard.* = .{
             .device = device,

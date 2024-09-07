@@ -3,10 +3,11 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
+const util = @import("util.zig");
+
 const server = &@import("main.zig").server;
 
 const log = std.log.scoped(.output);
-const gpa = std.heap.c_allocator;
 
 pub const Output = struct {
     wlr_output: *wlr.Output,
@@ -18,7 +19,7 @@ pub const Output = struct {
 
     // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
     pub fn create(wlr_output: *wlr.Output) !void {
-        const output = try gpa.create(Output);
+        const output = try util.gpa.create(Output);
 
         output.* = .{
             .wlr_output = wlr_output,
@@ -60,6 +61,6 @@ pub const Output = struct {
         output.frame.link.remove();
         output.destroy.link.remove();
 
-        gpa.destroy(output);
+        util.gpa.destroy(output);
     }
 };

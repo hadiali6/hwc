@@ -3,12 +3,13 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
+const util = @import("util.zig");
 const Output = @import("Output.zig").Output;
+const Popup = @import("XdgPopup.zig").Popup;
 
 const server = &@import("main.zig").server;
 
 const log = std.log.scoped(.xdgtoplevel);
-const gpa = std.heap.c_allocator;
 
 pub const Toplevel = struct {
     link: wl.list.Link = undefined,
@@ -26,10 +27,42 @@ pub const Toplevel = struct {
         wl.Listener(*wlr.XdgToplevel.event.Move).init(requestMove),
     request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
         wl.Listener(*wlr.XdgToplevel.event.Resize).init(requestResize),
+    new_popup: wl.Listener(*wlr.XdgPopup) =
+        wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
 
     request_minimize: wl.Listener(void) = wl.Listener(void).init(requestMinimize),
     request_maximize: wl.Listener(void) = wl.Listener(void).init(requestMaximize),
     request_fullscreen: wl.Listener(void) = wl.Listener(void).init(requestFullscreen),
+
+    pub fn create(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
+        const toplevel = util.gpa.create(Toplevel) catch {
+            log.err("failed to allocate new toplevel", .{});
+            return error.OutOfMemory;
+        };
+
+        toplevel.* = .{
+            .xdg_toplevel = wlr_toplevel,
+            .scene_tree = server.scene.tree.createSceneXdgSurface(wlr_toplevel.base) catch {
+                util.gpa.destroy(toplevel);
+                log.err("failed to allocate new toplevel", .{});
+                return error.OutOfMemory;
+            },
+        };
+
+        toplevel.scene_tree.node.data = @intFromPtr(toplevel);
+        wlr_toplevel.base.data = @intFromPtr(toplevel.scene_tree);
+
+        wlr_toplevel.base.surface.events.commit.add(&toplevel.commit);
+        wlr_toplevel.base.surface.events.map.add(&toplevel.map);
+        wlr_toplevel.base.surface.events.unmap.add(&toplevel.unmap);
+        wlr_toplevel.base.events.new_popup.add(&toplevel.new_popup);
+        wlr_toplevel.events.destroy.add(&toplevel.destroy);
+        wlr_toplevel.events.request_move.add(&toplevel.request_move);
+        wlr_toplevel.events.request_resize.add(&toplevel.request_resize);
+        wlr_toplevel.events.request_minimize.add(&toplevel.request_minimize);
+        wlr_toplevel.events.request_maximize.add(&toplevel.request_maximize);
+        wlr_toplevel.events.request_fullscreen.add(&toplevel.request_fullscreen);
+    }
 
     fn commit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         const toplevel: *Toplevel = @fieldParentPtr("commit", listener);
@@ -76,8 +109,9 @@ pub const Toplevel = struct {
         toplevel.request_minimize.link.remove();
         toplevel.request_maximize.link.remove();
         toplevel.request_fullscreen.link.remove();
+        toplevel.new_popup.link.remove();
 
-        gpa.destroy(toplevel);
+        util.gpa.destroy(toplevel);
     }
 
     fn requestMove(
@@ -183,6 +217,17 @@ pub const Toplevel = struct {
         );
         _ = toplevel.xdg_toplevel.setFullscreen(!is_fullscreen);
         toplevel.scene_tree.node.setPosition(toplevel.geometry.x, toplevel.geometry.y);
+    }
+
+    fn handleNewPopup(
+        _: *wl.Listener(*wlr.XdgPopup),
+        wlr_xdg_popup: *wlr.XdgPopup,
+    ) void {
+        // const toplevel: *Toplevel = @fieldParentPtr("new_popup", listener);
+        Popup.create(wlr_xdg_popup) catch {
+            wlr_xdg_popup.resource.postNoMemory();
+            return;
+        };
     }
 };
 

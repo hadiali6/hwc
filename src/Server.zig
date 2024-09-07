@@ -5,13 +5,11 @@ const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
 const Toplevel = @import("XdgToplevel.zig").Toplevel;
-const Popup = @import("XdgPopup.zig").Popup;
 const Keyboard = @import("Keyboard.zig").Keyboard;
 const Output = @import("Output.zig").Output;
 const Cursor = @import("Cursor.zig").Cursor;
 
 const log = std.log.scoped(.server);
-const gpa = std.heap.c_allocator;
 
 pub const Server = struct {
     wl_server: *wl.Server,
@@ -28,8 +26,6 @@ pub const Server = struct {
     xdg_shell: *wlr.XdgShell,
     new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) =
         wl.Listener(*wlr.XdgToplevel).init(newXdgToplevel),
-    new_xdg_popup: wl.Listener(*wlr.XdgPopup) =
-        wl.Listener(*wlr.XdgPopup).init(newXdgPopup),
     mapped_toplevels: wl.list.Head(Toplevel, .link) = undefined,
 
     seat: *wlr.Seat,
@@ -73,7 +69,6 @@ pub const Server = struct {
         self.backend.events.new_output.add(&self.new_output);
 
         self.xdg_shell.events.new_toplevel.add(&self.new_xdg_toplevel);
-        self.xdg_shell.events.new_popup.add(&self.new_xdg_popup);
         self.mapped_toplevels.init();
 
         self.backend.events.new_input.add(&self.new_input);
@@ -113,68 +108,14 @@ pub const Server = struct {
     }
 
     fn newXdgToplevel(
-        listener: *wl.Listener(*wlr.XdgToplevel),
+        _: *wl.Listener(*wlr.XdgToplevel),
         xdg_toplevel: *wlr.XdgToplevel,
     ) void {
-        const server: *Server = @fieldParentPtr("new_xdg_toplevel", listener);
-
-        const toplevel = gpa.create(Toplevel) catch {
-            log.err("failed to allocate new toplevel", .{});
+        Toplevel.create(xdg_toplevel) catch {
+            log.err("out of memory", .{});
+            xdg_toplevel.resource.postNoMemory();
             return;
         };
-
-        toplevel.* = .{
-            .xdg_toplevel = xdg_toplevel,
-            .scene_tree = server.scene.tree.createSceneXdgSurface(xdg_toplevel.base) catch {
-                gpa.destroy(toplevel);
-                log.err("failed to allocate new toplevel", .{});
-                return;
-            },
-        };
-
-        toplevel.scene_tree.node.data = @intFromPtr(toplevel);
-        xdg_toplevel.base.data = @intFromPtr(toplevel.scene_tree);
-
-        xdg_toplevel.base.surface.events.commit.add(&toplevel.commit);
-        xdg_toplevel.base.surface.events.map.add(&toplevel.map);
-        xdg_toplevel.base.surface.events.unmap.add(&toplevel.unmap);
-        xdg_toplevel.events.destroy.add(&toplevel.destroy);
-        xdg_toplevel.events.request_move.add(&toplevel.request_move);
-        xdg_toplevel.events.request_resize.add(&toplevel.request_resize);
-        xdg_toplevel.events.request_minimize.add(&toplevel.request_minimize);
-        xdg_toplevel.events.request_maximize.add(&toplevel.request_maximize);
-        xdg_toplevel.events.request_fullscreen.add(&toplevel.request_fullscreen);
-    }
-
-    fn newXdgPopup(
-        _: *wl.Listener(*wlr.XdgPopup),
-        xdg_popup: *wlr.XdgPopup,
-    ) void {
-        const xdg_surface = xdg_popup.base;
-
-        // These asserts are fine since tinywl.zig doesn't support anything else that can
-        // make xdg popups (e.g. layer shell).
-        const parent = wlr.XdgSurface.tryFromWlrSurface(xdg_popup.parent.?) orelse return;
-        const parent_tree = @as(?*wlr.SceneTree, @ptrFromInt(parent.data)) orelse {
-            // The xdg surface user data could be left null due to allocation failure.
-            return;
-        };
-        const scene_tree = parent_tree.createSceneXdgSurface(xdg_surface) catch {
-            log.err("failed to allocate xdg popup node", .{});
-            return;
-        };
-        xdg_surface.data = @intFromPtr(scene_tree);
-
-        const popup = gpa.create(Popup) catch {
-            log.err("failed to allocate new popup", .{});
-            return;
-        };
-        popup.* = .{
-            .xdg_popup = xdg_popup,
-        };
-
-        xdg_surface.surface.events.commit.add(&popup.commit);
-        xdg_popup.events.destroy.add(&popup.destroy);
     }
 
     const ToplevelAtResult = struct {
@@ -215,7 +156,12 @@ pub const Server = struct {
         if (self.seat.keyboard_state.focused_surface) |previous_surface| {
             if (previous_surface == surface) return;
             if (wlr.XdgSurface.tryFromWlrSurface(previous_surface)) |xdg_surface| {
-                _ = xdg_surface.role_data.toplevel.?.setActivated(false);
+                if (xdg_surface.role == .toplevel) {
+                    const previous_toplevel: ?*wlr.XdgToplevel = xdg_surface.role_data.toplevel;
+                    if (previous_toplevel != null) {
+                        _ = previous_toplevel.?.setActivated(false);
+                    }
+                }
             }
         }
 

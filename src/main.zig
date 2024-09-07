@@ -1,10 +1,10 @@
 const std = @import("std");
 const wlr = @import("wlroots");
 
+const util = @import("util.zig");
 const Server = @import("Server.zig").Server;
 
 const log = std.log.scoped(.main);
-const gpa = std.heap.c_allocator;
 
 const ArgsError = error{
     InvalidVerbosityLevel,
@@ -141,9 +141,9 @@ pub fn main() anyerror!void {
     if (std.os.argv.len >= 2) {
         var child = std.process.Child.init(
             &[_][]const u8{ "/bin/sh", "-c", cmd },
-            gpa,
+            util.gpa,
         );
-        var env_map = try std.process.getEnvMap(gpa);
+        var env_map = try std.process.getEnvMap(util.gpa);
         defer env_map.deinit();
         try env_map.put("WAYLAND_DISPLAY", socket);
         child.env_map = &env_map;
