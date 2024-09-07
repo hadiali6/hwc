@@ -30,7 +30,7 @@ pub const Server = struct {
         wl.Listener(*wlr.XdgToplevel).init(newXdgToplevel),
     new_xdg_popup: wl.Listener(*wlr.XdgPopup) =
         wl.Listener(*wlr.XdgPopup).init(newXdgPopup),
-    toplevels: wl.list.Head(Toplevel, .link) = undefined,
+    mapped_toplevels: wl.list.Head(Toplevel, .link) = undefined,
 
     seat: *wlr.Seat,
     new_input: wl.Listener(*wlr.InputDevice) =
@@ -74,7 +74,7 @@ pub const Server = struct {
 
         self.xdg_shell.events.new_toplevel.add(&self.new_xdg_toplevel);
         self.xdg_shell.events.new_popup.add(&self.new_xdg_popup);
-        self.toplevels.init();
+        self.mapped_toplevels.init();
 
         self.backend.events.new_input.add(&self.new_input);
         self.seat.events.request_set_cursor.add(&self.request_set_cursor);
@@ -106,7 +106,7 @@ pub const Server = struct {
         if (!wlr_output.commitState(&state)) return;
 
         Output.create(wlr_output) catch {
-            std.log.err("failed to allocate new output", .{});
+            log.err("failed to allocate new output", .{});
             wlr_output.destroy();
             return;
         };
@@ -117,29 +117,27 @@ pub const Server = struct {
         xdg_toplevel: *wlr.XdgToplevel,
     ) void {
         const server: *Server = @fieldParentPtr("new_xdg_toplevel", listener);
-        const xdg_surface = xdg_toplevel.base;
 
-        // Don't add the toplevel to server.toplevels until it is mapped
         const toplevel = gpa.create(Toplevel) catch {
-            std.log.err("failed to allocate new toplevel", .{});
+            log.err("failed to allocate new toplevel", .{});
             return;
         };
 
         toplevel.* = .{
             .xdg_toplevel = xdg_toplevel,
-            .scene_tree = server.scene.tree.createSceneXdgSurface(xdg_surface) catch {
+            .scene_tree = server.scene.tree.createSceneXdgSurface(xdg_toplevel.base) catch {
                 gpa.destroy(toplevel);
-                std.log.err("failed to allocate new toplevel", .{});
+                log.err("failed to allocate new toplevel", .{});
                 return;
             },
         };
 
         toplevel.scene_tree.node.data = @intFromPtr(toplevel);
-        xdg_surface.data = @intFromPtr(toplevel.scene_tree);
+        xdg_toplevel.base.data = @intFromPtr(toplevel.scene_tree);
 
-        xdg_surface.surface.events.commit.add(&toplevel.commit);
-        xdg_surface.surface.events.map.add(&toplevel.map);
-        xdg_surface.surface.events.unmap.add(&toplevel.unmap);
+        xdg_toplevel.base.surface.events.commit.add(&toplevel.commit);
+        xdg_toplevel.base.surface.events.map.add(&toplevel.map);
+        xdg_toplevel.base.surface.events.unmap.add(&toplevel.unmap);
         xdg_toplevel.events.destroy.add(&toplevel.destroy);
         xdg_toplevel.events.request_move.add(&toplevel.request_move);
         xdg_toplevel.events.request_resize.add(&toplevel.request_resize);
@@ -162,13 +160,13 @@ pub const Server = struct {
             return;
         };
         const scene_tree = parent_tree.createSceneXdgSurface(xdg_surface) catch {
-            std.log.err("failed to allocate xdg popup node", .{});
+            log.err("failed to allocate xdg popup node", .{});
             return;
         };
         xdg_surface.data = @intFromPtr(scene_tree);
 
         const popup = gpa.create(Popup) catch {
-            std.log.err("failed to allocate new popup", .{});
+            log.err("failed to allocate new popup", .{});
             return;
         };
         popup.* = .{
@@ -223,7 +221,7 @@ pub const Server = struct {
 
         toplevel.scene_tree.node.raiseToTop();
         toplevel.link.remove();
-        self.toplevels.prepend(toplevel);
+        self.mapped_toplevels.prepend(toplevel);
 
         _ = toplevel.xdg_toplevel.setActivated(true);
 
@@ -242,7 +240,7 @@ pub const Server = struct {
         const server: *Server = @fieldParentPtr("new_input", listener);
         switch (device.type) {
             .keyboard => Keyboard.create(device) catch |err| {
-                std.log.err("failed to create keyboard: {}", .{err});
+                log.err("failed to create keyboard: {}", .{err});
                 return;
             },
             .pointer => server.cursor.wlr_cursor.attachInputDevice(device),
@@ -284,27 +282,27 @@ pub const Server = struct {
             xkb.Keysym.Escape => self.wl_server.terminate(),
             // Focus the next toplevel in the stack, pushing the current top to the back
             xkb.Keysym.F1 => {
-                if (self.toplevels.length() < 2) return true;
-                const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
+                if (self.mapped_toplevels.length() < 2) return true;
+                const toplevel: *Toplevel = @fieldParentPtr("link", self.mapped_toplevels.link.prev.?);
                 self.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
             },
             // Set focused toplevel to fullscreen.
             xkb.Keysym.f => {
-                const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
+                const toplevel: *Toplevel = @fieldParentPtr("link", self.mapped_toplevels.link.prev.?);
                 if (toplevel.scene_tree.node.enabled) {
                     toplevel.xdg_toplevel.events.request_fullscreen.emit();
                 }
             },
             // Set focused toplevel to maximized.
             xkb.Keysym.M => {
-                const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
+                const toplevel: *Toplevel = @fieldParentPtr("link", self.mapped_toplevels.link.prev.?);
                 if (toplevel.scene_tree.node.enabled) {
                     toplevel.xdg_toplevel.events.request_maximize.emit();
                 }
             },
             // Set focused toplevel to minimized.
             xkb.Keysym.m => {
-                const toplevel: *Toplevel = @fieldParentPtr("link", self.toplevels.link.prev.?);
+                const toplevel: *Toplevel = @fieldParentPtr("link", self.mapped_toplevels.link.prev.?);
                 if (toplevel.scene_tree.node.enabled) {
                     toplevel.xdg_toplevel.events.request_minimize.emit();
                 }

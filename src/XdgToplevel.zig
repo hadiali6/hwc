@@ -42,7 +42,7 @@ pub const Toplevel = struct {
     fn map(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("map", listener);
         log.debug("Try Map: {*}", .{toplevel});
-        server.toplevels.prepend(toplevel);
+        server.mapped_toplevels.prepend(toplevel);
         server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
 
         toplevel.xdg_toplevel.base.getGeometry(&toplevel.geometry);
@@ -127,7 +127,7 @@ pub const Toplevel = struct {
             toplevel.previous_geometry = toplevel.geometry;
             toplevel.geometry.y = -toplevel.geometry.height;
             const next_toplevel: *Toplevel = @fieldParentPtr("link", toplevel.link.next.?);
-            if (server.toplevels.length() > 1) {
+            if (server.mapped_toplevels.length() > 1) {
                 server.focusToplevel(
                     next_toplevel,
                     next_toplevel.xdg_toplevel.base.surface,
