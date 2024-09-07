@@ -57,11 +57,6 @@ pub const Toplevel = struct {
         wlr_toplevel.base.surface.events.unmap.add(&toplevel.unmap);
         wlr_toplevel.base.events.new_popup.add(&toplevel.new_popup);
         wlr_toplevel.events.destroy.add(&toplevel.destroy);
-        wlr_toplevel.events.request_move.add(&toplevel.request_move);
-        wlr_toplevel.events.request_resize.add(&toplevel.request_resize);
-        wlr_toplevel.events.request_minimize.add(&toplevel.request_minimize);
-        wlr_toplevel.events.request_maximize.add(&toplevel.request_maximize);
-        wlr_toplevel.events.request_fullscreen.add(&toplevel.request_fullscreen);
     }
 
     fn commit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
@@ -75,6 +70,15 @@ pub const Toplevel = struct {
     fn map(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("map", listener);
         log.debug("Try Map: {*}", .{toplevel});
+        {
+            var events = toplevel.xdg_toplevel.events;
+            events.request_move.add(&toplevel.request_move);
+            events.request_resize.add(&toplevel.request_resize);
+            events.request_minimize.add(&toplevel.request_minimize);
+            events.request_maximize.add(&toplevel.request_maximize);
+            events.request_fullscreen.add(&toplevel.request_fullscreen);
+        }
+
         server.mapped_toplevels.prepend(toplevel);
         server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
 
