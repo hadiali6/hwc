@@ -34,7 +34,7 @@ pub const Toplevel = struct {
     request_maximize: wl.Listener(void) = wl.Listener(void).init(requestMaximize),
     request_fullscreen: wl.Listener(void) = wl.Listener(void).init(requestFullscreen),
 
-    pub fn create(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
+    pub fn init(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
         const toplevel = util.gpa.create(Toplevel) catch {
             log.err("failed to allocate new toplevel", .{});
             return error.OutOfMemory;
@@ -228,7 +228,7 @@ pub const Toplevel = struct {
         wlr_xdg_popup: *wlr.XdgPopup,
     ) void {
         // const toplevel: *Toplevel = @fieldParentPtr("new_popup", listener);
-        Popup.create(wlr_xdg_popup) catch {
+        Popup.init(wlr_xdg_popup) catch {
             wlr_xdg_popup.resource.postNoMemory();
             return;
         };

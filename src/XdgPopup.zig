@@ -13,7 +13,7 @@ pub const Popup = struct {
     commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(commit),
     destroy: wl.Listener(void) = wl.Listener(void).init(destroy),
 
-    pub fn create(wlr_xdg_popup: *wlr.XdgPopup) error{OutOfMemory}!void {
+    pub fn init(wlr_xdg_popup: *wlr.XdgPopup) error{OutOfMemory}!void {
         // These asserts are fine since tinywl.zig doesn't support anything else that can
         // make xdg popups (e.g. layer shell).
         const parent = wlr.XdgSurface.tryFromWlrSurface(wlr_xdg_popup.parent.?) orelse return;

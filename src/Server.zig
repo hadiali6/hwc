@@ -111,7 +111,7 @@ pub const Server = struct {
         _: *wl.Listener(*wlr.XdgToplevel),
         xdg_toplevel: *wlr.XdgToplevel,
     ) void {
-        Toplevel.create(xdg_toplevel) catch {
+        Toplevel.init(xdg_toplevel) catch {
             log.err("out of memory", .{});
             xdg_toplevel.resource.postNoMemory();
             return;
