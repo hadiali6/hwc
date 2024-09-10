@@ -214,11 +214,15 @@ pub const Output = struct {
         _ = output.wlr_output.commitState(event.state);
     }
 
-    fn destroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
+    fn destroy(
+        listener: *wl.Listener(*wlr.Output),
+        wlr_output: *wlr.Output,
+    ) void {
         const output: *Output = @fieldParentPtr("destroy", listener);
         const node: *Node = @fieldParentPtr("data", output);
 
         server.output_manager.outputs.remove(node);
+
         if (output.pending_config != null or output.previous_config != null) {
             const output_manager = &server.output_manager;
             output_manager.cancelConfiguration();
@@ -230,6 +234,6 @@ pub const Output = struct {
 
         wlr_output.data = 0;
 
-        util.gpa.destroy(output);
+        util.gpa.destroy(node);
     }
 };

@@ -46,12 +46,12 @@ pub const Server = struct {
     pub fn init(self: *Server) !void {
         const wl_server = try wl.Server.create();
         const loop = wl_server.getEventLoop();
-
         var session: ?*wlr.Session = undefined;
         const backend = try wlr.Backend.autocreate(loop, &session);
         const renderer = try wlr.Renderer.autocreate(backend);
         const output_layout = try wlr.OutputLayout.create(wl_server);
         const scene = try wlr.Scene.create();
+
         self.* = .{
             .wl_server = wl_server,
             .backend = backend,
@@ -66,6 +66,7 @@ pub const Server = struct {
             .cursor = undefined,
             .output_manager = undefined,
         };
+
         try self.cursor.init();
         try self.output_manager.init();
 

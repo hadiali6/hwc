@@ -19,70 +19,76 @@ pub const OutputManager = struct {
     /// if pending_config is zero when a failed configuration is being cancelled.
     pending_outputs: u32 = 0,
 
-    apply: wl.Listener(*wlr.OutputConfigurationV1) = wl.Listener(*wlr.OutputConfigurationV1).init(apply),
-    test_config: wl.Listener(*wlr.OutputConfigurationV1) = wl.Listener(*wlr.OutputConfigurationV1).init(testConfig),
-    destroy: wl.Listener(*wlr.OutputManagerV1) = wl.Listener(*wlr.OutputManagerV1).init(destroy),
+    apply_config: wl.Listener(*wlr.OutputConfigurationV1) =
+        wl.Listener(*wlr.OutputConfigurationV1).init(handleApply),
+    test_config: wl.Listener(*wlr.OutputConfigurationV1) =
+        wl.Listener(*wlr.OutputConfigurationV1).init(handleTest),
+    destroy: wl.Listener(*wlr.OutputManagerV1) =
+        wl.Listener(*wlr.OutputManagerV1).init(destroy),
 
-    pub fn init(manager: *OutputManager) !void {
-        manager.* = .{
+    pub fn init(self: *OutputManager) !void {
+        self.* = .{
             .manager = try wlr.OutputManagerV1.create(server.wl_server),
         };
-        manager.manager.events.apply.add(&manager.apply);
-        manager.manager.events.@"test".add(&manager.test_config);
-        manager.manager.events.destroy.add(&manager.destroy);
+        self.manager.events.apply.add(&self.apply_config);
+        self.manager.events.@"test".add(&self.test_config);
+        self.manager.events.destroy.add(&self.destroy);
     }
 
     /// Send the current output configuration to clients.
-    pub fn sendConfig(manager: *const OutputManager) !void {
-        std.debug.assert(manager.pending_config == null);
+    pub fn sendConfig(self: *const OutputManager) !void {
+        std.debug.assert(self.pending_config == null);
 
         const config = try wlr.OutputConfigurationV1.create();
         errdefer config.destroy();
 
-        var it = manager.outputs.first;
+        var it = self.outputs.first;
         while (it) |output_node| : (it = output_node.next) {
             _ = try output_node.data.createHead(config);
         }
-        manager.manager.setConfiguration(config);
+        self.manager.setConfiguration(config);
     }
 
     /// Finish a configuration and send the new state to clients if it was
     /// succesful.
-    pub fn finishConfiguration(manager: *OutputManager) void {
-        std.debug.assert(manager.pending_outputs == 0);
+    pub fn finishConfiguration(self: *OutputManager) void {
+        std.debug.assert(self.pending_outputs == 0);
         log.info("Configuration succeeded", .{});
-        var it = manager.outputs.first;
+
+        var it = self.outputs.first;
         while (it) |output_node| : (it = output_node.next) {
             output_node.data.previous_config = null;
             output_node.data.pending_config = null;
         }
-        if (manager.pending_config) |pending_config| {
+
+        if (self.pending_config) |pending_config| {
             pending_config.sendSucceeded();
-            manager.pending_config = null;
-            manager.sendConfig() catch {};
+            self.pending_config = null;
+            self.sendConfig() catch {};
         }
     }
 
     /// Cancel a failed configuration.
-    pub fn cancelConfiguration(manager: *OutputManager) void {
+    pub fn cancelConfiguration(self: *OutputManager) void {
         log.info("Cancelling failed configuration", .{});
-        if (manager.pending_config == null) {
-            if (manager.pending_outputs != 0) {
+        if (self.pending_config == null) {
+            if (self.pending_outputs != 0) {
                 log.warn("Tried to cancel a cancellation. Stopping at current state", .{});
-                var it = manager.outputs.first;
+                var it = self.outputs.first;
                 while (it) |output| : (it = output.next) {
                     output.data.previous_config = null;
                     output.data.pending_config = null;
                 }
-                manager.sendConfig() catch {
+                self.sendConfig() catch {
                     log.err("Failed to send current output state", .{});
                 };
                 return;
             }
             return;
         }
-        const pending = manager.pending_config.?;
-        manager.pending_outputs = 0;
+
+        const pending = self.pending_config.?;
+        self.pending_outputs = 0;
 
         var it = pending.heads.iterator(.forward);
         while (it.next()) |head| {
@@ -93,31 +99,34 @@ pub const OutputManager = struct {
             if (output.previous_config != null) {
                 output.pending_config = output.previous_config;
                 output.previous_config = null;
-                manager.pending_outputs += 1;
+                self.pending_outputs += 1;
             }
         }
         pending.sendFailed();
         pending.destroy();
-        manager.pending_config = null;
+        self.pending_config = null;
     }
 
     /// Add a new output.
-    pub fn addOutput(manager: *OutputManager, wlr_output: *wlr.Output) !void {
+    pub fn addOutput(self: *OutputManager, wlr_output: *wlr.Output) !void {
         const node = try Output.create(wlr_output);
-        manager.outputs.append(node);
+        self.outputs.append(node);
 
         // Keep things simple and don't allow modifying the pending configuration.
         // Just cancel everything and let the client retry. This won't work very
         // well if a failed configuration is currently being cancelled, but that's
         // fine; we needn't handle all possible special cases.
-        if (manager.pending_config != null) {
-            manager.cancelConfiguration();
+        if (self.pending_config != null) {
+            self.cancelConfiguration();
         }
-        try manager.sendConfig();
+        try self.sendConfig();
     }
 
-    fn apply(listener: *wl.Listener(*wlr.OutputConfigurationV1), configuration: *wlr.OutputConfigurationV1) void {
-        const manager: *OutputManager = @fieldParentPtr("apply", listener);
+    fn handleApply(
+        listener: *wl.Listener(*wlr.OutputConfigurationV1),
+        configuration: *wlr.OutputConfigurationV1,
+    ) void {
+        const manager: *OutputManager = @fieldParentPtr("apply_config", listener);
         if (manager.pending_config != null or manager.pending_outputs != 0) {
             log.warn("Unable to apply configuration: previous one in progress", .{});
             configuration.sendFailed();
@@ -145,11 +154,14 @@ pub const OutputManager = struct {
         }
     }
 
-    fn testConfig(listener: *wl.Listener(*wlr.OutputConfigurationV1), configuration: *wlr.OutputConfigurationV1) void {
-        _ = listener;
-        var it = configuration.heads.iterator(.forward);
+    fn handleTest(
+        _: *wl.Listener(*wlr.OutputConfigurationV1),
+        configuration: *wlr.OutputConfigurationV1,
+    ) void {
+        // _ = listener;
+        var iterator = configuration.heads.iterator(.forward);
         var failed = false;
-        while (it.next()) |head| {
+        while (iterator.next()) |head| {
             var output_state = wlr.Output.State.init();
             defer output_state.finish();
             head.state.apply(&output_state);
@@ -166,9 +178,12 @@ pub const OutputManager = struct {
         configuration.destroy();
     }
 
-    fn destroy(listener: *wl.Listener(*wlr.OutputManagerV1), _: *wlr.OutputManagerV1) void {
+    fn destroy(
+        listener: *wl.Listener(*wlr.OutputManagerV1),
+        _: *wlr.OutputManagerV1,
+    ) void {
         const manager: *OutputManager = @fieldParentPtr("destroy", listener);
-        manager.apply.link.remove();
+        manager.apply_config.link.remove();
         manager.test_config.link.remove();
         manager.destroy.link.remove();
     }
