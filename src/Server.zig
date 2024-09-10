@@ -8,6 +8,7 @@ const Toplevel = @import("XdgToplevel.zig").Toplevel;
 const Keyboard = @import("Keyboard.zig").Keyboard;
 const Output = @import("Output.zig").Output;
 const Cursor = @import("Cursor.zig").Cursor;
+const OutputManager = @import("OutputManager.zig").OutputManager;
 
 const log = std.log.scoped(.server);
 
@@ -18,6 +19,8 @@ pub const Server = struct {
     renderer: *wlr.Renderer,
     allocator: *wlr.Allocator,
     scene: *wlr.Scene,
+
+    output_manager: OutputManager,
 
     output_layout: *wlr.OutputLayout,
     scene_output_layout: *wlr.SceneOutputLayout,
@@ -61,8 +64,10 @@ pub const Server = struct {
             .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
             .seat = try wlr.Seat.create(wl_server, "default"),
             .cursor = undefined,
+            .output_manager = undefined,
         };
         try self.cursor.init();
+        try self.output_manager.init();
 
         try self.renderer.initServer(wl_server);
 
@@ -87,8 +92,12 @@ pub const Server = struct {
         self.wl_server.destroy();
     }
 
-    fn newOutput(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
-        Output.create(wlr_output) catch {
+    fn newOutput(
+        listener: *wl.Listener(*wlr.Output),
+        wlr_output: *wlr.Output,
+    ) void {
+        const server: *Server = @fieldParentPtr("new_output", listener);
+        server.output_manager.addOutput(wlr_output) catch {
             log.err("failed to allocate new output", .{});
             wlr_output.destroy();
             return;

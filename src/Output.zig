@@ -7,10 +7,17 @@ const util = @import("util.zig");
 
 const server = &@import("main.zig").server;
 
+const Node = std.DoublyLinkedList(Output).Node;
 const log = std.log.scoped(.output);
 
 pub const Output = struct {
     wlr_output: *wlr.Output,
+    /// The previous configuration applied to the output, used for cancelling failed
+    /// configurations. This is reset after all outputs have been succesfully
+    /// configured.
+    previous_config: ?wlr.OutputHeadV1.State = null,
+    /// The new configuration waiting to be applied on the next commit.
+    pending_config: ?wlr.OutputHeadV1.State = null,
 
     frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(frame),
     request_state: wl.Listener(*wlr.Output.event.RequestState) =
@@ -18,7 +25,7 @@ pub const Output = struct {
     destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(destroy),
 
     // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
-    pub fn create(wlr_output: *wlr.Output) !void {
+    pub fn create(wlr_output: *wlr.Output) !*Node {
         if (!wlr_output.initRender(server.allocator, server.renderer)) {
             return error.InitRenderFailed;
         }
@@ -60,29 +67,137 @@ pub const Output = struct {
             }
         }
 
-        const output = try util.gpa.create(Output);
+        const node = try util.gpa.create(Node);
+        errdefer util.gpa.destroy(node);
+
+        const output = &node.data;
 
         output.* = .{
             .wlr_output = wlr_output,
         };
-
-        wlr_output.data = @intFromPtr(output);
 
         wlr_output.events.frame.add(&output.frame);
         wlr_output.events.request_state.add(&output.request_state);
         wlr_output.events.destroy.add(&output.destroy);
 
         const layout_output = try server.output_layout.addAuto(wlr_output);
+        errdefer server.output_layout.remove(wlr_output);
 
         const scene_output = try server.scene.createSceneOutput(wlr_output);
+        errdefer scene_output.destroy();
+
         server.scene_output_layout.addOutput(layout_output, scene_output);
+
+        wlr_output.data = @intFromPtr(output);
+        return node;
+    }
+
+    /// Return the current configuration of the output.
+    fn getCurrentConfig(output: *const Output) wlr.OutputHeadV1.State {
+        const wlr_output = output.wlr_output;
+        const layout_output = server.output_layout.get(wlr_output);
+        return .{
+            .output = wlr_output,
+            .enabled = wlr_output.enabled,
+            .mode = wlr_output.current_mode,
+            .custom_mode = .{
+                .width = wlr_output.width,
+                .height = wlr_output.height,
+                .refresh = wlr_output.refresh,
+            },
+            .x = if (layout_output) |l_output| l_output.x else undefined,
+            .y = if (layout_output) |l_output| l_output.y else undefined,
+            .transform = wlr_output.transform,
+            .scale = wlr_output.scale,
+            .adaptive_sync_enabled = wlr_output.adaptive_sync_status == .enabled,
+        };
+    }
+
+    /// Create a prefilled configuration head for the output.
+    pub fn createHead(
+        output: *const Output,
+        config: *wlr.OutputConfigurationV1,
+    ) !*wlr.OutputConfigurationV1.Head {
+        const head = try wlr.OutputConfigurationV1.Head.create(config, output.wlr_output);
+        head.state = output.getCurrentConfig();
+        return head;
+    }
+
+    /// Commit a new configuration to the output.
+    pub fn commitConfig(output: *Output, config: *const wlr.OutputHeadV1.State) !void {
+        const scene = server.scene;
+        const scene_output = scene.getSceneOutput(output.wlr_output).?;
+        const wlr_output = output.wlr_output;
+
+        log.debug("Committing changes for output {s}", .{wlr_output.name});
+        if (config.enabled) {
+            const layout_output = try server.output_layout.add(wlr_output, config.x, config.y);
+            errdefer server.output_layout.remove(wlr_output);
+            if (!wlr_output.enabled) {
+                log.debug("Enabling output {s}", .{wlr_output.name});
+                server.scene_output_layout.addOutput(layout_output, scene_output);
+            }
+            var new_width: u31 = @intFromFloat(
+                @as(
+                    f32,
+                    @floatFromInt(if (config.mode) |mode|
+                        mode.width
+                    else
+                        config.custom_mode.width),
+                ) / config.scale,
+            );
+            var new_height: u31 = @intFromFloat(
+                @as(
+                    f32,
+                    @floatFromInt(if (config.mode) |mode|
+                        mode.height
+                    else
+                        config.custom_mode.height),
+                ) / config.scale,
+            );
+            if (@rem(@intFromEnum(config.transform), 2) != 0) {
+                const tmp = new_width;
+                new_width = new_height;
+                new_height = tmp;
+            }
+            // output.musa_output.setSize(new_width, new_height);
+            // TODO: Somehow trick the wlr output layout into using the new sizes?
+        } else {
+            log.debug("Disabling output {s}", .{wlr_output.name});
+            server.output_layout.remove(wlr_output);
+        }
+        var output_state = wlr.Output.State.init();
+        defer output_state.finish();
+        config.apply(&output_state);
+        if (!scene_output.buildState(&output_state, null) or
+            !wlr_output.commitState(&output_state))
+        {
+            log.debug("Commit failed for output {s}", .{wlr_output.name});
+            return error.OutputCommitFailed;
+        }
     }
 
     fn frame(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
         const output: *Output = @fieldParentPtr("frame", listener);
 
         const scene_output = server.scene.getSceneOutput(output.wlr_output).?;
-        _ = scene_output.commit(null);
+
+        if (output.pending_config) |pending_config| {
+            output.previous_config = output.getCurrentConfig();
+            output.commitConfig(&pending_config) catch {
+                output.pending_config = null;
+                output.previous_config = null;
+                server.output_manager.cancelConfiguration();
+                return;
+            };
+            output.pending_config = null;
+            server.output_manager.pending_outputs -= 1;
+            if (server.output_manager.pending_outputs == 0) {
+                server.output_manager.finishConfiguration();
+            }
+        } else {
+            _ = scene_output.commit(null);
+        }
 
         var now: std.posix.timespec = undefined;
         std.posix.clock_gettime(std.posix.CLOCK.MONOTONIC, &now) catch {
@@ -99,11 +214,21 @@ pub const Output = struct {
         _ = output.wlr_output.commitState(event.state);
     }
 
-    fn destroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
+    fn destroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
         const output: *Output = @fieldParentPtr("destroy", listener);
+        const node: *Node = @fieldParentPtr("data", output);
 
+        server.output_manager.outputs.remove(node);
+        if (output.pending_config != null or output.previous_config != null) {
+            const output_manager = &server.output_manager;
+            output_manager.cancelConfiguration();
+        }
+
+        output.request_state.link.remove();
         output.frame.link.remove();
         output.destroy.link.remove();
+
+        wlr_output.data = 0;
 
         util.gpa.destroy(output);
     }
