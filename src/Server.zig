@@ -14,6 +14,7 @@ const log = std.log.scoped(.server);
 pub const Server = struct {
     wl_server: *wl.Server,
     backend: *wlr.Backend,
+    session: ?*wlr.Session,
     renderer: *wlr.Renderer,
     allocator: *wlr.Allocator,
     scene: *wlr.Scene,
@@ -42,13 +43,16 @@ pub const Server = struct {
     pub fn init(self: *Server) !void {
         const wl_server = try wl.Server.create();
         const loop = wl_server.getEventLoop();
-        const backend = try wlr.Backend.autocreate(loop, null);
+
+        var session: ?*wlr.Session = undefined;
+        const backend = try wlr.Backend.autocreate(loop, &session);
         const renderer = try wlr.Renderer.autocreate(backend);
         const output_layout = try wlr.OutputLayout.create(wl_server);
         const scene = try wlr.Scene.create();
         self.* = .{
             .wl_server = wl_server,
             .backend = backend,
+            .session = session,
             .renderer = renderer,
             .allocator = try wlr.Allocator.autocreate(backend, renderer),
             .scene = scene,
@@ -83,23 +87,7 @@ pub const Server = struct {
         self.wl_server.destroy();
     }
 
-    fn newOutput(
-        listener: *wl.Listener(*wlr.Output),
-        wlr_output: *wlr.Output,
-    ) void {
-        const server: *Server = @fieldParentPtr("new_output", listener);
-
-        if (!wlr_output.initRender(server.allocator, server.renderer)) return;
-
-        var state = wlr.Output.State.init();
-        defer state.finish();
-
-        state.setEnabled(true);
-        if (wlr_output.preferredMode()) |mode| {
-            state.setMode(mode);
-        }
-        if (!wlr_output.commitState(&state)) return;
-
+    fn newOutput(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
         Output.create(wlr_output) catch {
             log.err("failed to allocate new output", .{});
             wlr_output.destroy();
@@ -218,43 +206,5 @@ pub const Server = struct {
     ) void {
         const server: *Server = @fieldParentPtr("request_set_selection", listener);
         server.seat.setSelection(event.source, event.serial);
-    }
-
-    /// Assumes the modifier used for compositor keybinds is pressed
-    /// Returns true if the key was handled
-    pub fn handleKeybind(self: *Server, key: xkb.Keysym) bool {
-        switch (@intFromEnum(key)) {
-            // Exit the compositor
-            xkb.Keysym.Escape => self.wl_server.terminate(),
-            // Focus the next toplevel in the stack, pushing the current top to the back
-            xkb.Keysym.F1 => {
-                if (self.mapped_toplevels.length() < 2) return true;
-                const toplevel: *Toplevel = @fieldParentPtr("link", self.mapped_toplevels.link.prev.?);
-                self.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
-            },
-            // Set focused toplevel to fullscreen.
-            xkb.Keysym.f => {
-                const toplevel: *Toplevel = @fieldParentPtr("link", self.mapped_toplevels.link.prev.?);
-                if (toplevel.scene_tree.node.enabled) {
-                    toplevel.xdg_toplevel.events.request_fullscreen.emit();
-                }
-            },
-            // Set focused toplevel to maximized.
-            xkb.Keysym.M => {
-                const toplevel: *Toplevel = @fieldParentPtr("link", self.mapped_toplevels.link.prev.?);
-                if (toplevel.scene_tree.node.enabled) {
-                    toplevel.xdg_toplevel.events.request_maximize.emit();
-                }
-            },
-            // Set focused toplevel to minimized.
-            xkb.Keysym.m => {
-                const toplevel: *Toplevel = @fieldParentPtr("link", self.mapped_toplevels.link.prev.?);
-                if (toplevel.scene_tree.node.enabled) {
-                    toplevel.xdg_toplevel.events.request_minimize.emit();
-                }
-            },
-            else => return false,
-        }
-        return true;
     }
 };

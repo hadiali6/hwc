@@ -19,11 +19,55 @@ pub const Output = struct {
 
     // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
     pub fn create(wlr_output: *wlr.Output) !void {
+        if (!wlr_output.initRender(server.allocator, server.renderer)) {
+            return error.InitRenderFailed;
+        }
+        {
+            var state = wlr.Output.State.init();
+            defer state.finish();
+
+            state.setEnabled(true);
+
+            if (wlr_output.preferredMode()) |mode| {
+                log.info("initial output commit with perferred mode succeeded with mode {}x{}@{}mHz", .{
+                    mode.width,
+                    mode.height,
+                    mode.refresh,
+                });
+                state.setMode(mode);
+            }
+
+            if (!wlr_output.commitState(&state)) {
+                log.err("initial output commit with preferred mode failed, trying all modes", .{});
+                var iterator = wlr_output.modes.iterator(.forward);
+                while (iterator.next()) |mode| {
+                    state.setMode(mode);
+                    if (wlr_output.commitState(&state)) {
+                        log.info("initial output commit succeeded with mode {}x{}@{}mHz", .{
+                            mode.width,
+                            mode.height,
+                            mode.refresh,
+                        });
+                        break;
+                    } else {
+                        log.err("initial output commit failed with mode {}x{}@{}mHz", .{
+                            mode.width,
+                            mode.height,
+                            mode.refresh,
+                        });
+                    }
+                }
+            }
+        }
+
         const output = try util.gpa.create(Output);
 
         output.* = .{
             .wlr_output = wlr_output,
         };
+
+        wlr_output.data = @intFromPtr(output);
+
         wlr_output.events.frame.add(&output.frame);
         wlr_output.events.request_state.add(&output.request_state);
         wlr_output.events.destroy.add(&output.destroy);

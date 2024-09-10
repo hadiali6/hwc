@@ -5,6 +5,7 @@ const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
 const util = @import("util.zig");
+const Toplevel = @import("XdgToplevel.zig").Toplevel;
 
 const server = &@import("main.zig").server;
 
@@ -15,9 +16,9 @@ pub const Keyboard = struct {
     device: *wlr.InputDevice,
 
     modifiers: wl.Listener(*wlr.Keyboard) =
-        wl.Listener(*wlr.Keyboard).init(modifiers),
+        wl.Listener(*wlr.Keyboard).init(handleModifiers),
     key: wl.Listener(*wlr.Keyboard.event.Key) =
-        wl.Listener(*wlr.Keyboard.event.Key).init(key),
+        wl.Listener(*wlr.Keyboard.event.Key).init(handleKey),
 
     pub fn create(device: *wlr.InputDevice) !void {
         const keyboard = try util.gpa.create(Keyboard);
@@ -43,7 +44,7 @@ pub const Keyboard = struct {
         server.keyboards.append(keyboard);
     }
 
-    fn modifiers(
+    fn handleModifiers(
         _: *wl.Listener(*wlr.Keyboard),
         wlr_keyboard: *wlr.Keyboard,
     ) void {
@@ -52,23 +53,28 @@ pub const Keyboard = struct {
         server.seat.keyboardNotifyModifiers(&wlr_keyboard.modifiers);
     }
 
-    fn key(
+    fn handleKey(
         listener: *wl.Listener(*wlr.Keyboard.event.Key),
         event: *wlr.Keyboard.event.Key,
     ) void {
         const keyboard: *Keyboard = @fieldParentPtr("key", listener);
         const wlr_keyboard = keyboard.device.toKeyboard();
 
-        // Translate libinput keycode -> xkbcommon
-        const keycode = event.keycode + 8;
-
         // If the keyboard is in a group, this event will be handled by the group's Keyboard instance.
         if (wlr_keyboard.group != null) return;
 
+        // Translate libinput keycode -> xkbcommon
+        const keycode = event.keycode + 8;
+
+        const xkb_state = (wlr_keyboard.xkb_state orelse return).ref();
+        defer xkb_state.unref();
+        const keysyms = xkb_state.keyGetSyms(keycode);
+
         var handled = false;
-        if (wlr_keyboard.getModifiers().alt and event.state == .pressed) {
-            for (wlr_keyboard.xkb_state.?.keyGetSyms(keycode)) |sym| {
-                if (server.handleKeybind(sym)) {
+        const modifiers = wlr_keyboard.getModifiers();
+        if (event.state == .pressed) {
+            for (keysyms) |sym| {
+                if (handleBuiltinMapping(modifiers, sym)) {
                     handled = true;
                     break;
                 }
@@ -81,3 +87,70 @@ pub const Keyboard = struct {
         }
     }
 };
+
+/// Handle any builtin, harcoded compsitor mappings such as VT switching.
+/// Returns true if the keysym was handled.
+fn handleBuiltinMapping(
+    modifiers: wlr.Keyboard.ModifierMask,
+    keysym: xkb.Keysym,
+) bool {
+    var result: bool = undefined;
+    if (modifiers.alt and modifiers.ctrl) {
+        result = ttyBinds(keysym);
+    } else if (modifiers.alt) {
+        result = normalBinds(keysym);
+    }
+    return result;
+}
+
+fn ttyBinds(keysym: xkb.Keysym) bool {
+    switch (@intFromEnum(keysym)) {
+        xkb.Keysym.XF86Switch_VT_1...xkb.Keysym.XF86Switch_VT_12 => {
+            log.debug("switch VT keysym received", .{});
+            if (server.session) |session| {
+                const vt = @intFromEnum(keysym) - xkb.Keysym.XF86Switch_VT_1 + 1;
+                const log_server = std.log.scoped(.server);
+                log_server.info("switching to VT {}", .{vt});
+                session.changeVt(vt) catch log_server.err("changing VT failed", .{});
+            }
+        },
+        else => return false,
+    }
+    return true;
+}
+
+fn normalBinds(keysym: xkb.Keysym) bool {
+    switch (@intFromEnum(keysym)) {
+        // Exit the compositor
+        xkb.Keysym.Escape => server.wl_server.terminate(),
+        // Focus the next toplevel in the stack, pushing the current top to the back
+        xkb.Keysym.F1 => {
+            if (server.mapped_toplevels.length() < 2) return true;
+            const toplevel: *Toplevel = @fieldParentPtr("link", server.mapped_toplevels.link.prev.?);
+            server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
+        },
+        // Set focused toplevel to fullscreen.
+        xkb.Keysym.f => {
+            const toplevel: *Toplevel = @fieldParentPtr("link", server.mapped_toplevels.link.prev.?);
+            if (toplevel.scene_tree.node.enabled) {
+                toplevel.xdg_toplevel.events.request_fullscreen.emit();
+            }
+        },
+        // Set focused toplevel to maximized.
+        xkb.Keysym.M => {
+            const toplevel: *Toplevel = @fieldParentPtr("link", server.mapped_toplevels.link.prev.?);
+            if (toplevel.scene_tree.node.enabled) {
+                toplevel.xdg_toplevel.events.request_maximize.emit();
+            }
+        },
+        // Set focused toplevel to minimized.
+        xkb.Keysym.m => {
+            const toplevel: *Toplevel = @fieldParentPtr("link", server.mapped_toplevels.link.prev.?);
+            if (toplevel.scene_tree.node.enabled) {
+                toplevel.xdg_toplevel.events.request_minimize.emit();
+            }
+        },
+        else => return false,
+    }
+    return true;
+}
