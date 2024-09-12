@@ -98,11 +98,12 @@ pub const Server = struct {
         wlr_output: *wlr.Output,
     ) void {
         const server: *Server = @fieldParentPtr("new_output", listener);
-        server.output_manager.addOutput(wlr_output) catch {
+        const output = try Output.create(wlr_output) catch {
             log.err("failed to allocate new output", .{});
             wlr_output.destroy();
             return;
         };
+        server.output_manager.addOutput(wlr_output, output);
     }
 
     fn newXdgToplevel(
@@ -202,12 +203,13 @@ pub const Server = struct {
         event: *wlr.Seat.event.RequestSetCursor,
     ) void {
         const server: *Server = @fieldParentPtr("request_set_cursor", listener);
-        if (event.seat_client == server.seat.pointer_state.focused_client)
+        if (event.seat_client == server.seat.pointer_state.focused_client) {
             server.cursor.wlr_cursor.setSurface(
                 event.surface,
                 event.hotspot_x,
                 event.hotspot_y,
             );
+        }
     }
 
     fn requestSetSelection(

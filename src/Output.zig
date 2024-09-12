@@ -7,10 +7,11 @@ const util = @import("util.zig");
 
 const server = &@import("main.zig").server;
 
-const Node = std.DoublyLinkedList(Output).Node;
+// const Node = std.DoublyLinkedList(Output).Node;
 const log = std.log.scoped(.output);
 
 pub const Output = struct {
+    link: wl.list.Link,
     wlr_output: *wlr.Output,
     /// The previous configuration applied to the output, used for cancelling failed
     /// configurations. This is reset after all outputs have been succesfully
@@ -25,7 +26,7 @@ pub const Output = struct {
     destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(destroy),
 
     // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
-    pub fn create(wlr_output: *wlr.Output) !*Node {
+    pub fn create(wlr_output: *wlr.Output) !*Output {
         if (!wlr_output.initRender(server.allocator, server.renderer)) {
             return error.InitRenderFailed;
         }
@@ -67,12 +68,11 @@ pub const Output = struct {
             }
         }
 
-        const node = try util.gpa.create(Node);
-        errdefer util.gpa.destroy(node);
-
-        const output = &node.data;
+        const output = try util.gpa.create(Output);
+        errdefer util.gpa.destroy(output);
 
         output.* = .{
+            .link = undefined,
             .wlr_output = wlr_output,
         };
 
@@ -89,7 +89,8 @@ pub const Output = struct {
         server.scene_output_layout.addOutput(layout_output, scene_output);
 
         wlr_output.data = @intFromPtr(output);
-        return node;
+
+        return output;
     }
 
     /// Return the current configuration of the output.
@@ -160,8 +161,6 @@ pub const Output = struct {
                 new_width = new_height;
                 new_height = tmp;
             }
-            // output.musa_output.setSize(new_width, new_height);
-            // TODO: Somehow trick the wlr output layout into using the new sizes?
         } else {
             log.debug("Disabling output {s}", .{wlr_output.name});
             server.output_layout.remove(wlr_output);
@@ -219,9 +218,9 @@ pub const Output = struct {
         wlr_output: *wlr.Output,
     ) void {
         const output: *Output = @fieldParentPtr("destroy", listener);
-        const node: *Node = @fieldParentPtr("data", output);
+        // const node: *Node = @fieldParentPtr("data", output);
 
-        server.output_manager.outputs.remove(node);
+        output.link.remove();
 
         if (output.pending_config != null or output.previous_config != null) {
             const output_manager = &server.output_manager;
@@ -234,6 +233,6 @@ pub const Output = struct {
 
         wlr_output.data = 0;
 
-        util.gpa.destroy(node);
+        util.gpa.destroy(output);
     }
 };

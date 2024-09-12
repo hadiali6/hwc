@@ -11,10 +11,13 @@ const log = std.log.scoped(.output_manager);
 
 pub const OutputManager = struct {
     manager: *wlr.OutputManagerV1,
+
     /// All the outputs known to the manager.
-    outputs: std.DoublyLinkedList(Output) = .{},
+    outputs: wl.list.Head(Output, .link),
+
     /// The configuration that is currently being applied.
     pending_config: ?*wlr.OutputConfigurationV1 = null,
+
     /// The outputs that are currently being configured. This can be positive even
     /// if pending_config is zero when a failed configuration is being cancelled.
     pending_outputs: u32 = 0,
@@ -29,36 +32,37 @@ pub const OutputManager = struct {
     pub fn init(self: *OutputManager) !void {
         self.* = .{
             .manager = try wlr.OutputManagerV1.create(server.wl_server),
+            .outputs = undefined,
         };
+        self.outputs.init();
         self.manager.events.apply.add(&self.apply_config);
         self.manager.events.@"test".add(&self.test_config);
         self.manager.events.destroy.add(&self.destroy);
     }
 
     /// Send the current output configuration to clients.
-    pub fn sendConfig(self: *const OutputManager) !void {
+    pub fn sendConfig(self: *OutputManager) !void {
         std.debug.assert(self.pending_config == null);
 
         const config = try wlr.OutputConfigurationV1.create();
         errdefer config.destroy();
 
-        var it = self.outputs.first;
-        while (it) |output_node| : (it = output_node.next) {
-            _ = try output_node.data.createHead(config);
+        var iterator = self.outputs.iterator(.forward);
+        while (iterator.next()) |output| {
+            _ = try output.createHead(config);
         }
         self.manager.setConfiguration(config);
     }
 
-    /// Finish a configuration and send the new state to clients if it was
-    /// succesful.
+    /// Finish a configuration and send the new state to clients if it was succesful.
     pub fn finishConfiguration(self: *OutputManager) void {
         std.debug.assert(self.pending_outputs == 0);
         log.info("Configuration succeeded", .{});
 
-        var it = self.outputs.first;
-        while (it) |output_node| : (it = output_node.next) {
-            output_node.data.previous_config = null;
-            output_node.data.pending_config = null;
+        var iterator = self.outputs.iterator(.forward);
+        while (iterator.next()) |output| {
+            output.previous_config = null;
+            output.pending_config = null;
         }
 
         if (self.pending_config) |pending_config| {
@@ -71,13 +75,14 @@ pub const OutputManager = struct {
     /// Cancel a failed configuration.
     pub fn cancelConfiguration(self: *OutputManager) void {
         log.info("Cancelling failed configuration", .{});
+
         if (self.pending_config == null) {
             if (self.pending_outputs != 0) {
                 log.warn("Tried to cancel a cancellation. Stopping at current state", .{});
-                var it = self.outputs.first;
-                while (it) |output| : (it = output.next) {
-                    output.data.previous_config = null;
-                    output.data.pending_config = null;
+                var iterator = self.outputs.iterator(.forward);
+                while (iterator.next()) |output| {
+                    output.previous_config = null;
+                    output.pending_config = null;
                 }
                 self.sendConfig() catch {
                     log.err("Failed to send current output state", .{});
@@ -90,27 +95,29 @@ pub const OutputManager = struct {
         const pending = self.pending_config.?;
         self.pending_outputs = 0;
 
-        var it = pending.heads.iterator(.forward);
-        while (it.next()) |head| {
+        var iterator = pending.heads.iterator(.forward);
+        while (iterator.next()) |head| {
             const output: *Output = @ptrFromInt(head.state.output.data);
+
             if (output.pending_config != null) {
                 output.pending_config = null;
             }
+
             if (output.previous_config != null) {
                 output.pending_config = output.previous_config;
                 output.previous_config = null;
                 self.pending_outputs += 1;
             }
         }
+
         pending.sendFailed();
         pending.destroy();
         self.pending_config = null;
     }
 
     /// Add a new output.
-    pub fn addOutput(self: *OutputManager, wlr_output: *wlr.Output) !void {
-        const node = try Output.create(wlr_output);
-        self.outputs.append(node);
+    pub fn addOutput(self: *OutputManager, output: *Output) !void {
+        self.outputs.append(output);
 
         // Keep things simple and don't allow modifying the pending configuration.
         // Just cancel everything and let the client retry. This won't work very
@@ -127,15 +134,17 @@ pub const OutputManager = struct {
         configuration: *wlr.OutputConfigurationV1,
     ) void {
         const manager: *OutputManager = @fieldParentPtr("apply_config", listener);
+
         if (manager.pending_config != null or manager.pending_outputs != 0) {
             log.warn("Unable to apply configuration: previous one in progress", .{});
             configuration.sendFailed();
             configuration.destroy();
             return;
         }
+
         manager.pending_config = configuration;
-        var it = configuration.heads.iterator(.forward);
-        while (it.next()) |head| {
+        var iterator = configuration.heads.iterator(.forward);
+        while (iterator.next()) |head| {
             const output: *Output = @ptrFromInt(head.state.output.data);
             std.debug.assert(output.previous_config == null);
             std.debug.assert(output.pending_config == null);
@@ -158,9 +167,9 @@ pub const OutputManager = struct {
         _: *wl.Listener(*wlr.OutputConfigurationV1),
         configuration: *wlr.OutputConfigurationV1,
     ) void {
-        // _ = listener;
-        var iterator = configuration.heads.iterator(.forward);
         var failed = false;
+        var iterator = configuration.heads.iterator(.forward);
+
         while (iterator.next()) |head| {
             var output_state = wlr.Output.State.init();
             defer output_state.finish();
@@ -170,6 +179,7 @@ pub const OutputManager = struct {
                 break;
             }
         }
+
         if (failed) {
             configuration.sendFailed();
         } else {
