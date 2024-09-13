@@ -39,6 +39,10 @@ pub const Server = struct {
         wl.Listener(*wlr.Seat.event.RequestSetSelection).init(handleRequestSetSelection),
     keyboards: wl.list.Head(Keyboard, .link) = undefined,
 
+    xdg_decoration_manager: *wlr.XdgDecorationManagerV1,
+    new_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) =
+        wl.Listener(*wlr.XdgToplevelDecorationV1).init(handleNewToplevelDecoration),
+
     cursor: Cursor,
     output_manager: OutputManager,
 
@@ -62,6 +66,7 @@ pub const Server = struct {
             .scene_output_layout = try scene.attachOutputLayout(output_layout),
             .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
             .seat = try wlr.Seat.create(wl_server, "default"),
+            .xdg_decoration_manager = try wlr.XdgDecorationManagerV1.create(wl_server),
             .cursor = undefined,
             .output_manager = undefined,
         };
@@ -219,5 +224,12 @@ pub const Server = struct {
     ) void {
         const server: *Server = @fieldParentPtr("request_set_selection", listener);
         server.seat.setSelection(event.source, event.serial);
+    }
+
+    fn handleNewToplevelDecoration(
+        _: *wl.Listener(*wlr.XdgToplevelDecorationV1),
+        wlr_decoration: *wlr.XdgToplevelDecorationV1,
+    ) void {
+        _ = wlr.XdgToplevelDecorationV1.setMode(wlr_decoration, .server_side);
     }
 };
