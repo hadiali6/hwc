@@ -20,10 +20,10 @@ pub const Output = struct {
     /// The new configuration waiting to be applied on the next commit.
     pending_config: ?wlr.OutputHeadV1.State = null,
 
-    frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(frame),
+    frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleFrame),
     request_state: wl.Listener(*wlr.Output.event.RequestState) =
-        wl.Listener(*wlr.Output.event.RequestState).init(requestState),
-    destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(destroy),
+        wl.Listener(*wlr.Output.event.RequestState).init(handleRequestState),
+    destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleDestroy),
 
     // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
     pub fn create(wlr_output: *wlr.Output) !*Output {
@@ -176,21 +176,24 @@ pub const Output = struct {
         }
     }
 
-    fn frame(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
+    fn handleFrame(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
         const output: *Output = @fieldParentPtr("frame", listener);
 
         const scene_output = server.scene.getSceneOutput(output.wlr_output).?;
 
         if (output.pending_config) |pending_config| {
             output.previous_config = output.getCurrentConfig();
+
             output.commitConfig(&pending_config) catch {
                 output.pending_config = null;
                 output.previous_config = null;
                 server.output_manager.cancelConfiguration();
                 return;
             };
+
             output.pending_config = null;
             server.output_manager.pending_outputs -= 1;
+
             if (server.output_manager.pending_outputs == 0) {
                 server.output_manager.finishConfiguration();
             }
@@ -205,7 +208,7 @@ pub const Output = struct {
         scene_output.sendFrameDone(&now);
     }
 
-    fn requestState(
+    fn handleRequestState(
         listener: *wl.Listener(*wlr.Output.event.RequestState),
         event: *wlr.Output.event.RequestState,
     ) void {
@@ -213,7 +216,7 @@ pub const Output = struct {
         _ = output.wlr_output.commitState(event.state);
     }
 
-    fn destroy(
+    fn handleDestroy(
         listener: *wl.Listener(*wlr.Output),
         wlr_output: *wlr.Output,
     ) void {

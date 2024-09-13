@@ -27,7 +27,7 @@ pub const OutputManager = struct {
     test_config: wl.Listener(*wlr.OutputConfigurationV1) =
         wl.Listener(*wlr.OutputConfigurationV1).init(handleTest),
     destroy: wl.Listener(*wlr.OutputManagerV1) =
-        wl.Listener(*wlr.OutputManagerV1).init(destroy),
+        wl.Listener(*wlr.OutputManagerV1).init(handleDestroy),
 
     pub fn init(self: *OutputManager) !void {
         self.* = .{
@@ -44,12 +44,16 @@ pub const OutputManager = struct {
     pub fn sendConfig(self: *OutputManager) !void {
         std.debug.assert(self.pending_config == null);
 
-        const config = try wlr.OutputConfigurationV1.create();
+        const config = wlr.OutputConfigurationV1.create() catch {
+            return error.ConfigCreateOOM;
+        };
         errdefer config.destroy();
 
         var iterator = self.outputs.iterator(.forward);
         while (iterator.next()) |output| {
-            _ = try output.createHead(config);
+            _ = output.createHead(config) catch {
+                return error.ConfigHeadCreateOOM;
+            };
         }
         self.manager.setConfiguration(config);
     }
@@ -68,25 +72,32 @@ pub const OutputManager = struct {
         if (self.pending_config) |pending_config| {
             pending_config.sendSucceeded();
             self.pending_config = null;
-            self.sendConfig() catch {};
+            self.sendConfig() catch |err| switch (err) {
+                error.ConfigCreateOOM => log.err("failed to allocate output configuration {}", .{err}),
+                error.ConfigHeadCreateOOM => log.err("failed to allocate output configuration head {}", .{err}),
+            };
         }
     }
 
     /// Cancel a failed configuration.
     pub fn cancelConfiguration(self: *OutputManager) void {
-        log.info("Cancelling failed configuration", .{});
+        log.info("cancelling failed configuration", .{});
 
         if (self.pending_config == null) {
             if (self.pending_outputs != 0) {
-                log.warn("Tried to cancel a cancellation. Stopping at current state", .{});
+                log.warn("tried to cancel a cancellation. stopping at current state", .{});
+
                 var iterator = self.outputs.iterator(.forward);
                 while (iterator.next()) |output| {
                     output.previous_config = null;
                     output.pending_config = null;
                 }
-                self.sendConfig() catch {
-                    log.err("Failed to send current output state", .{});
+
+                self.sendConfig() catch |err| switch (err) {
+                    error.ConfigCreateOOM => log.err("failed to allocate output configuration {}", .{err}),
+                    error.ConfigHeadCreateOOM => log.err("failed to allocate output configuration head {}", .{err}),
                 };
+
                 return;
             }
             return;
@@ -116,7 +127,7 @@ pub const OutputManager = struct {
     }
 
     /// Add a new output.
-    pub fn addOutput(self: *OutputManager, output: *Output) !void {
+    pub fn addOutput(self: *OutputManager, output: *Output) void {
         self.outputs.append(output);
 
         // Keep things simple and don't allow modifying the pending configuration.
@@ -126,7 +137,10 @@ pub const OutputManager = struct {
         if (self.pending_config != null) {
             self.cancelConfiguration();
         }
-        try self.sendConfig();
+        self.sendConfig() catch |err| switch (err) {
+            error.ConfigCreateOOM => log.err("failed to allocate output configuration {}", .{err}),
+            error.ConfigHeadCreateOOM => log.err("failed to allocate output configuration head {}", .{err}),
+        };
     }
 
     fn handleApply(
@@ -146,8 +160,10 @@ pub const OutputManager = struct {
         var iterator = configuration.heads.iterator(.forward);
         while (iterator.next()) |head| {
             const output: *Output = @ptrFromInt(head.state.output.data);
+
             std.debug.assert(output.previous_config == null);
             std.debug.assert(output.pending_config == null);
+
             if (head.state.enabled and !output.wlr_output.enabled) {
                 output.commitConfig(&head.state) catch {
                     manager.cancelConfiguration();
@@ -185,14 +201,16 @@ pub const OutputManager = struct {
         } else {
             configuration.sendSucceeded();
         }
+
         configuration.destroy();
     }
 
-    fn destroy(
+    fn handleDestroy(
         listener: *wl.Listener(*wlr.OutputManagerV1),
         _: *wlr.OutputManagerV1,
     ) void {
         const manager: *OutputManager = @fieldParentPtr("destroy", listener);
+
         manager.apply_config.link.remove();
         manager.test_config.link.remove();
         manager.destroy.link.remove();
