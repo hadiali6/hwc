@@ -8,6 +8,7 @@ const Toplevel = @import("XdgToplevel.zig").Toplevel;
 const Keyboard = @import("Keyboard.zig").Keyboard;
 const Output = @import("Output.zig").Output;
 const Cursor = @import("Cursor.zig").Cursor;
+const OutputManager = @import("OutputManager.zig").OutputManager;
 
 const log = std.log.scoped(.server);
 
@@ -22,33 +23,34 @@ pub const Server = struct {
     output_layout: *wlr.OutputLayout,
     scene_output_layout: *wlr.SceneOutputLayout,
     new_output: wl.Listener(*wlr.Output) =
-        wl.Listener(*wlr.Output).init(newOutput),
+        wl.Listener(*wlr.Output).init(handleNewOutput),
 
     xdg_shell: *wlr.XdgShell,
     new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) =
-        wl.Listener(*wlr.XdgToplevel).init(newXdgToplevel),
+        wl.Listener(*wlr.XdgToplevel).init(handleNewXdgToplevel),
     mapped_toplevels: wl.list.Head(Toplevel, .link) = undefined,
 
     seat: *wlr.Seat,
     new_input: wl.Listener(*wlr.InputDevice) =
-        wl.Listener(*wlr.InputDevice).init(newInput),
+        wl.Listener(*wlr.InputDevice).init(handleNewInput),
     request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) =
-        wl.Listener(*wlr.Seat.event.RequestSetCursor).init(requestSetCursor),
+        wl.Listener(*wlr.Seat.event.RequestSetCursor).init(handleRequestSetCursor),
     request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) =
-        wl.Listener(*wlr.Seat.event.RequestSetSelection).init(requestSetSelection),
+        wl.Listener(*wlr.Seat.event.RequestSetSelection).init(handleRequestSetSelection),
     keyboards: wl.list.Head(Keyboard, .link) = undefined,
 
     cursor: Cursor,
+    output_manager: OutputManager,
 
     pub fn init(self: *Server) !void {
         const wl_server = try wl.Server.create();
         const loop = wl_server.getEventLoop();
-
         var session: ?*wlr.Session = undefined;
         const backend = try wlr.Backend.autocreate(loop, &session);
         const renderer = try wlr.Renderer.autocreate(backend);
         const output_layout = try wlr.OutputLayout.create(wl_server);
         const scene = try wlr.Scene.create();
+
         self.* = .{
             .wl_server = wl_server,
             .backend = backend,
@@ -61,8 +63,11 @@ pub const Server = struct {
             .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
             .seat = try wlr.Seat.create(wl_server, "default"),
             .cursor = undefined,
+            .output_manager = undefined,
         };
+
         try self.cursor.init();
+        try self.output_manager.init();
 
         try self.renderer.initServer(wl_server);
 
@@ -85,25 +90,6 @@ pub const Server = struct {
         self.cursor.deinit();
         self.wl_server.destroyClients();
         self.wl_server.destroy();
-    }
-
-    fn newOutput(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
-        Output.create(wlr_output) catch {
-            log.err("failed to allocate new output", .{});
-            wlr_output.destroy();
-            return;
-        };
-    }
-
-    fn newXdgToplevel(
-        _: *wl.Listener(*wlr.XdgToplevel),
-        xdg_toplevel: *wlr.XdgToplevel,
-    ) void {
-        Toplevel.init(xdg_toplevel) catch {
-            log.err("out of memory", .{});
-            xdg_toplevel.resource.postNoMemory();
-            return;
-        };
     }
 
     const ToplevelAtResult = struct {
@@ -167,7 +153,33 @@ pub const Server = struct {
         );
     }
 
-    fn newInput(
+    fn handleNewOutput(
+        listener: *wl.Listener(*wlr.Output),
+        wlr_output: *wlr.Output,
+    ) void {
+        const server: *Server = @fieldParentPtr("new_output", listener);
+
+        const output = Output.create(wlr_output) catch |err| {
+            log.err("failed to allocate new output {}", .{err});
+            wlr_output.destroy();
+            return;
+        };
+
+        server.output_manager.addOutput(output);
+    }
+
+    fn handleNewXdgToplevel(
+        _: *wl.Listener(*wlr.XdgToplevel),
+        xdg_toplevel: *wlr.XdgToplevel,
+    ) void {
+        Toplevel.init(xdg_toplevel) catch {
+            log.err("out of memory", .{});
+            xdg_toplevel.resource.postNoMemory();
+            return;
+        };
+    }
+
+    fn handleNewInput(
         listener: *wl.Listener(*wlr.InputDevice),
         device: *wlr.InputDevice,
     ) void {
@@ -187,20 +199,21 @@ pub const Server = struct {
         });
     }
 
-    fn requestSetCursor(
+    fn handleRequestSetCursor(
         listener: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
         event: *wlr.Seat.event.RequestSetCursor,
     ) void {
         const server: *Server = @fieldParentPtr("request_set_cursor", listener);
-        if (event.seat_client == server.seat.pointer_state.focused_client)
+        if (event.seat_client == server.seat.pointer_state.focused_client) {
             server.cursor.wlr_cursor.setSurface(
                 event.surface,
                 event.hotspot_x,
                 event.hotspot_y,
             );
+        }
     }
 
-    fn requestSetSelection(
+    fn handleRequestSetSelection(
         listener: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
         event: *wlr.Seat.event.RequestSetSelection,
     ) void {
