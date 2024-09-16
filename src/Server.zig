@@ -85,6 +85,8 @@ pub const Server = struct {
         self.xdg_shell.events.new_toplevel.add(&self.new_xdg_toplevel);
         self.mapped_toplevels.init();
 
+        self.xdg_decoration_manager.events.new_toplevel_decoration.add(&self.new_toplevel_decoration);
+
         self.backend.events.new_input.add(&self.new_input);
         self.seat.events.request_set_cursor.add(&self.request_set_cursor);
         self.seat.events.request_set_selection.add(&self.request_set_selection);
@@ -230,6 +232,6 @@ pub const Server = struct {
         _: *wl.Listener(*wlr.XdgToplevelDecorationV1),
         wlr_decoration: *wlr.XdgToplevelDecorationV1,
     ) void {
-        _ = wlr.XdgToplevelDecorationV1.setMode(wlr_decoration, .server_side);
+        _ = wlr.XdgToplevelDecorationV1.setMode(wlr_decoration, .client_side);
     }
 };
