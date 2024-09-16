@@ -4,6 +4,7 @@ const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
+const config = @import("config.zig");
 const Toplevel = @import("XdgToplevel.zig").Toplevel;
 const Keyboard = @import("Keyboard.zig").Keyboard;
 const Output = @import("Output.zig").Output;
@@ -179,7 +180,7 @@ pub const Server = struct {
         _: *wl.Listener(*wlr.XdgToplevel),
         xdg_toplevel: *wlr.XdgToplevel,
     ) void {
-        Toplevel.init(xdg_toplevel) catch {
+        Toplevel.create(xdg_toplevel) catch {
             log.err("out of memory", .{});
             xdg_toplevel.resource.postNoMemory();
             return;
@@ -230,8 +231,8 @@ pub const Server = struct {
 
     fn handleNewToplevelDecoration(
         _: *wl.Listener(*wlr.XdgToplevelDecorationV1),
-        wlr_decoration: *wlr.XdgToplevelDecorationV1,
+        wlr_xdg_decoration: *wlr.XdgToplevelDecorationV1,
     ) void {
-        _ = wlr.XdgToplevelDecorationV1.setMode(wlr_decoration, .client_side);
+        _ = wlr_xdg_decoration.setMode(config.decoration_mode);
     }
 };
