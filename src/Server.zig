@@ -4,11 +4,13 @@ const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
+const config = @import("config.zig");
 const Toplevel = @import("XdgToplevel.zig").Toplevel;
 const Keyboard = @import("Keyboard.zig").Keyboard;
 const Output = @import("Output.zig").Output;
 const Cursor = @import("Cursor.zig").Cursor;
 const OutputManager = @import("OutputManager.zig").OutputManager;
+const Decoration = @import("Decoration.zig").Decoration;
 
 const log = std.log.scoped(.server);
 
@@ -39,6 +41,10 @@ pub const Server = struct {
         wl.Listener(*wlr.Seat.event.RequestSetSelection).init(handleRequestSetSelection),
     keyboards: wl.list.Head(Keyboard, .link) = undefined,
 
+    xdg_decoration_manager: *wlr.XdgDecorationManagerV1,
+    new_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) =
+        wl.Listener(*wlr.XdgToplevelDecorationV1).init(handleNewToplevelDecoration),
+
     cursor: Cursor,
     output_manager: OutputManager,
 
@@ -62,6 +68,7 @@ pub const Server = struct {
             .scene_output_layout = try scene.attachOutputLayout(output_layout),
             .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
             .seat = try wlr.Seat.create(wl_server, "default"),
+            .xdg_decoration_manager = try wlr.XdgDecorationManagerV1.create(wl_server),
             .cursor = undefined,
             .output_manager = undefined,
         };
@@ -79,6 +86,8 @@ pub const Server = struct {
 
         self.xdg_shell.events.new_toplevel.add(&self.new_xdg_toplevel);
         self.mapped_toplevels.init();
+
+        self.xdg_decoration_manager.events.new_toplevel_decoration.add(&self.new_toplevel_decoration);
 
         self.backend.events.new_input.add(&self.new_input);
         self.seat.events.request_set_cursor.add(&self.request_set_cursor);
@@ -172,7 +181,7 @@ pub const Server = struct {
         _: *wl.Listener(*wlr.XdgToplevel),
         xdg_toplevel: *wlr.XdgToplevel,
     ) void {
-        Toplevel.init(xdg_toplevel) catch {
+        Toplevel.create(xdg_toplevel) catch {
             log.err("out of memory", .{});
             xdg_toplevel.resource.postNoMemory();
             return;
@@ -219,5 +228,12 @@ pub const Server = struct {
     ) void {
         const server: *Server = @fieldParentPtr("request_set_selection", listener);
         server.seat.setSelection(event.source, event.serial);
+    }
+
+    fn handleNewToplevelDecoration(
+        _: *wl.Listener(*wlr.XdgToplevelDecorationV1),
+        wlr_xdg_decoration: *wlr.XdgToplevelDecorationV1,
+    ) void {
+        Decoration.init(wlr_xdg_decoration);
     }
 };

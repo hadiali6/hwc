@@ -7,6 +7,7 @@ pub fn build(b: *std.Build) void {
 
     const scanner = Scanner.create(b, .{});
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
+    scanner.addSystemProtocol("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml");
 
     scanner.generate("wl_compositor", 4);
     scanner.generate("wl_subcompositor", 1);
@@ -15,6 +16,7 @@ pub fn build(b: *std.Build) void {
     scanner.generate("wl_seat", 7);
     scanner.generate("wl_data_device_manager", 3);
     scanner.generate("xdg_wm_base", 2);
+    scanner.generate("zxdg_decoration_manager_v1", 1);
 
     const wayland = b.createModule(.{ .root_source_file = scanner.result });
 

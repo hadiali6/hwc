@@ -7,7 +7,6 @@ const util = @import("util.zig");
 
 const server = &@import("main.zig").server;
 
-// const Node = std.DoublyLinkedList(Output).Node;
 const log = std.log.scoped(.output);
 
 pub const Output = struct {

@@ -6,6 +6,7 @@ const wlr = @import("wlroots");
 const util = @import("util.zig");
 const Output = @import("Output.zig").Output;
 const Popup = @import("XdgPopup.zig").Popup;
+const Decoration = @import("Decoration.zig").Decoration;
 
 const server = &@import("main.zig").server;
 
@@ -18,6 +19,8 @@ pub const Toplevel = struct {
 
     geometry: wlr.Box = undefined,
     previous_geometry: wlr.Box = undefined,
+
+    decoration: ?Decoration = null,
 
     commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(commit),
     map: wl.Listener(void) = wl.Listener(void).init(map),
@@ -34,7 +37,7 @@ pub const Toplevel = struct {
     request_maximize: wl.Listener(void) = wl.Listener(void).init(requestMaximize),
     request_fullscreen: wl.Listener(void) = wl.Listener(void).init(requestFullscreen),
 
-    pub fn init(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
+    pub fn create(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
         const toplevel = util.gpa.create(Toplevel) catch {
             log.err("failed to allocate new toplevel", .{});
             return error.OutOfMemory;
@@ -50,7 +53,8 @@ pub const Toplevel = struct {
         };
 
         toplevel.scene_tree.node.data = @intFromPtr(toplevel);
-        wlr_toplevel.base.data = @intFromPtr(toplevel.scene_tree);
+        wlr_toplevel.base.data = @intFromPtr(toplevel);
+        wlr_toplevel.base.surface.data = @intFromPtr(&toplevel.scene_tree.node);
 
         wlr_toplevel.base.surface.events.commit.add(&toplevel.commit);
         wlr_toplevel.base.surface.events.map.add(&toplevel.map);
@@ -61,7 +65,6 @@ pub const Toplevel = struct {
 
     fn commit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         const toplevel: *Toplevel = @fieldParentPtr("commit", listener);
-        // log.debug("Try Commit: {*}", .{toplevel});
         if (toplevel.xdg_toplevel.base.initial_commit) {
             _ = toplevel.xdg_toplevel.setSize(0, 0);
         }
@@ -69,7 +72,6 @@ pub const Toplevel = struct {
 
     fn map(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("map", listener);
-        log.debug("Try Map: {*}", .{toplevel});
         {
             var events = toplevel.xdg_toplevel.events;
             events.request_move.add(&toplevel.request_move);
@@ -96,13 +98,11 @@ pub const Toplevel = struct {
 
     fn unmap(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("unmap", listener);
-        log.debug("Try Unmap: {*}", .{toplevel});
         toplevel.link.remove();
     }
 
     fn destroy(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("destroy", listener);
-        log.debug("Try Destroy: {*}", .{toplevel});
 
         toplevel.commit.link.remove();
         toplevel.map.link.remove();
@@ -115,6 +115,9 @@ pub const Toplevel = struct {
         toplevel.request_fullscreen.link.remove();
         toplevel.new_popup.link.remove();
 
+        // The wlr_surface may outlive the wlr_xdg_toplevel so we must clean up the user data.
+        toplevel.xdg_toplevel.base.surface.data = 0;
+
         util.gpa.destroy(toplevel);
     }
 
@@ -123,7 +126,6 @@ pub const Toplevel = struct {
         _: *wlr.XdgToplevel.event.Move,
     ) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_move", listener);
-        log.debug("Try Move: {*}", .{toplevel});
         server.cursor.grabbed_toplevel = toplevel;
         server.cursor.mode = .move;
         server.cursor.grab_x = server.cursor.wlr_cursor.x -
@@ -137,7 +139,6 @@ pub const Toplevel = struct {
         event: *wlr.XdgToplevel.event.Resize,
     ) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_resize", listener);
-        log.debug("Try Resize: {*}", .{toplevel});
 
         server.cursor.grabbed_toplevel = toplevel;
         server.cursor.mode = .resize;
@@ -158,7 +159,6 @@ pub const Toplevel = struct {
 
     fn requestMinimize(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_minimize", listener);
-        log.debug("Try Minimize: {*}", .{toplevel});
 
         const minimize_requested: bool = toplevel.xdg_toplevel.requested.minimized;
         if (minimize_requested) {
@@ -180,7 +180,6 @@ pub const Toplevel = struct {
     }
     fn requestMaximize(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_maximize", listener);
-        log.debug("Try Maximize: {*}", .{toplevel});
 
         var usable_area: wlr.Box = getUsableArea(getActiveOutput(toplevel).?);
         const is_maximized: bool = toplevel.xdg_toplevel.current.maximized;
@@ -199,7 +198,6 @@ pub const Toplevel = struct {
     }
     fn requestFullscreen(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_fullscreen", listener);
-        log.debug("Try Fullscreen: {*}", .{toplevel});
 
         const is_fullscreen: bool = toplevel.xdg_toplevel.current.fullscreen;
         if (!is_fullscreen) {
@@ -227,8 +225,7 @@ pub const Toplevel = struct {
         _: *wl.Listener(*wlr.XdgPopup),
         wlr_xdg_popup: *wlr.XdgPopup,
     ) void {
-        // const toplevel: *Toplevel = @fieldParentPtr("new_popup", listener);
-        Popup.init(wlr_xdg_popup) catch {
+        Popup.create(wlr_xdg_popup) catch {
             wlr_xdg_popup.resource.postNoMemory();
             return;
         };

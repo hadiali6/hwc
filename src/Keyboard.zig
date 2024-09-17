@@ -4,6 +4,7 @@ const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
+const config = @import("config.zig");
 const util = @import("util.zig");
 const Toplevel = @import("XdgToplevel.zig").Toplevel;
 
@@ -35,7 +36,7 @@ pub const Keyboard = struct {
 
         const wlr_keyboard = device.toKeyboard();
         if (!wlr_keyboard.setKeymap(keymap)) return error.SetKeymapFailed;
-        wlr_keyboard.setRepeatInfo(25, 600);
+        wlr_keyboard.setRepeatInfo(config.keyboard_rate, config.keyboard_delay);
 
         wlr_keyboard.events.modifiers.add(&keyboard.modifiers);
         wlr_keyboard.events.key.add(&keyboard.key);
