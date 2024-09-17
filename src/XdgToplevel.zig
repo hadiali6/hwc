@@ -16,26 +16,27 @@ pub const Toplevel = struct {
     link: wl.list.Link = undefined,
     xdg_toplevel: *wlr.XdgToplevel,
     scene_tree: *wlr.SceneTree,
-
     geometry: wlr.Box = undefined,
     previous_geometry: wlr.Box = undefined,
-
     decoration: ?Decoration = null,
 
-    commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(commit),
-    map: wl.Listener(void) = wl.Listener(void).init(map),
-    unmap: wl.Listener(void) = wl.Listener(void).init(unmap),
-    destroy: wl.Listener(void) = wl.Listener(void).init(destroy),
-    request_move: wl.Listener(*wlr.XdgToplevel.event.Move) =
-        wl.Listener(*wlr.XdgToplevel.event.Move).init(requestMove),
-    request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
-        wl.Listener(*wlr.XdgToplevel.event.Resize).init(requestResize),
+    commit: wl.Listener(*wlr.Surface) =
+        wl.Listener(*wlr.Surface).init(handleCommit),
+    map: wl.Listener(void) = wl.Listener(void).init(handleMap),
+    unmap: wl.Listener(void) = wl.Listener(void).init(handleUnmap),
+    destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
     new_popup: wl.Listener(*wlr.XdgPopup) =
         wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
-
-    request_minimize: wl.Listener(void) = wl.Listener(void).init(requestMinimize),
-    request_maximize: wl.Listener(void) = wl.Listener(void).init(requestMaximize),
-    request_fullscreen: wl.Listener(void) = wl.Listener(void).init(requestFullscreen),
+    request_fullscreen: wl.Listener(void) =
+        wl.Listener(void).init(requestFullscreen),
+    request_maximize: wl.Listener(void) =
+        wl.Listener(void).init(requestMaximize),
+    request_minimize: wl.Listener(void) =
+        wl.Listener(void).init(requestMinimize),
+    request_move: wl.Listener(*wlr.XdgToplevel.event.Move) =
+        wl.Listener(*wlr.XdgToplevel.event.Move).init(handleMove),
+    request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
+        wl.Listener(*wlr.XdgToplevel.event.Resize).init(handleResize),
 
     pub fn create(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
         const toplevel = util.gpa.create(Toplevel) catch {
@@ -63,14 +64,14 @@ pub const Toplevel = struct {
         wlr_toplevel.events.destroy.add(&toplevel.destroy);
     }
 
-    fn commit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
+    fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         const toplevel: *Toplevel = @fieldParentPtr("commit", listener);
         if (toplevel.xdg_toplevel.base.initial_commit) {
             _ = toplevel.xdg_toplevel.setSize(0, 0);
         }
     }
 
-    fn map(listener: *wl.Listener(void)) void {
+    fn handleMap(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("map", listener);
         {
             var events = toplevel.xdg_toplevel.events;
@@ -96,12 +97,12 @@ pub const Toplevel = struct {
         toplevel.geometry.y = 0;
     }
 
-    fn unmap(listener: *wl.Listener(void)) void {
+    fn handleUnmap(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("unmap", listener);
         toplevel.link.remove();
     }
 
-    fn destroy(listener: *wl.Listener(void)) void {
+    fn handleDestroy(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("destroy", listener);
 
         toplevel.commit.link.remove();
@@ -121,7 +122,7 @@ pub const Toplevel = struct {
         util.gpa.destroy(toplevel);
     }
 
-    fn requestMove(
+    fn handleMove(
         listener: *wl.Listener(*wlr.XdgToplevel.event.Move),
         _: *wlr.XdgToplevel.event.Move,
     ) void {
@@ -134,7 +135,7 @@ pub const Toplevel = struct {
             @as(f64, @floatFromInt(toplevel.geometry.y));
     }
 
-    fn requestResize(
+    fn handleResize(
         listener: *wl.Listener(*wlr.XdgToplevel.event.Resize),
         event: *wlr.XdgToplevel.event.Resize,
     ) void {
@@ -178,6 +179,7 @@ pub const Toplevel = struct {
         }
         toplevel.scene_tree.node.setPosition(toplevel.geometry.x, toplevel.geometry.y);
     }
+
     fn requestMaximize(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_maximize", listener);
 
@@ -196,6 +198,7 @@ pub const Toplevel = struct {
         _ = toplevel.xdg_toplevel.setMaximized(!is_maximized);
         toplevel.scene_tree.node.setPosition(toplevel.geometry.x, toplevel.geometry.y);
     }
+
     fn requestFullscreen(listener: *wl.Listener(void)) void {
         const toplevel: *Toplevel = @fieldParentPtr("request_fullscreen", listener);
 

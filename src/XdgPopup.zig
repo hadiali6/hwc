@@ -10,8 +10,8 @@ const log = std.log.scoped(.xdgpopup);
 pub const Popup = struct {
     xdg_popup: *wlr.XdgPopup,
 
-    commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(commit),
-    destroy: wl.Listener(void) = wl.Listener(void).init(destroy),
+    commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(handleCommit),
+    destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
 
     pub fn create(wlr_xdg_popup: *wlr.XdgPopup) error{OutOfMemory}!void {
         // These asserts are fine since tinywl.zig doesn't support anything else that can
@@ -37,14 +37,14 @@ pub const Popup = struct {
         wlr_xdg_popup.events.destroy.add(&popup.destroy);
     }
 
-    fn commit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
+    fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         const popup: *Popup = @fieldParentPtr("commit", listener);
         if (popup.xdg_popup.base.initial_commit) {
             _ = popup.xdg_popup.base.scheduleConfigure();
         }
     }
 
-    fn destroy(listener: *wl.Listener(void)) void {
+    fn handleDestroy(listener: *wl.Listener(void)) void {
         const popup: *Popup = @fieldParentPtr("destroy", listener);
         popup.commit.link.remove();
         popup.destroy.link.remove();
