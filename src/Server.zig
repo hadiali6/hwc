@@ -10,6 +10,7 @@ const Keyboard = @import("Keyboard.zig").Keyboard;
 const Output = @import("Output.zig").Output;
 const Cursor = @import("Cursor.zig").Cursor;
 const OutputManager = @import("OutputManager.zig").OutputManager;
+const Decoration = @import("Decoration.zig").Decoration;
 
 const log = std.log.scoped(.server);
 
@@ -233,6 +234,6 @@ pub const Server = struct {
         _: *wl.Listener(*wlr.XdgToplevelDecorationV1),
         wlr_xdg_decoration: *wlr.XdgToplevelDecorationV1,
     ) void {
-        _ = wlr_xdg_decoration.setMode(config.decoration_mode);
+        Decoration.init(wlr_xdg_decoration);
     }
 };

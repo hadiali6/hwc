@@ -6,6 +6,7 @@ const wlr = @import("wlroots");
 const util = @import("util.zig");
 const Output = @import("Output.zig").Output;
 const Popup = @import("XdgPopup.zig").Popup;
+const Decoration = @import("Decoration.zig").Decoration;
 
 const server = &@import("main.zig").server;
 
@@ -18,6 +19,8 @@ pub const Toplevel = struct {
 
     geometry: wlr.Box = undefined,
     previous_geometry: wlr.Box = undefined,
+
+    decoration: ?Decoration = null,
 
     commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(commit),
     map: wl.Listener(void) = wl.Listener(void).init(map),
@@ -50,7 +53,8 @@ pub const Toplevel = struct {
         };
 
         toplevel.scene_tree.node.data = @intFromPtr(toplevel);
-        wlr_toplevel.base.data = @intFromPtr(toplevel.scene_tree);
+        wlr_toplevel.base.data = @intFromPtr(toplevel);
+        wlr_toplevel.base.surface.data = @intFromPtr(&toplevel.scene_tree.node);
 
         wlr_toplevel.base.surface.events.commit.add(&toplevel.commit);
         wlr_toplevel.base.surface.events.map.add(&toplevel.map);
@@ -110,6 +114,9 @@ pub const Toplevel = struct {
         toplevel.request_maximize.link.remove();
         toplevel.request_fullscreen.link.remove();
         toplevel.new_popup.link.remove();
+
+        // The wlr_surface may outlive the wlr_xdg_toplevel so we must clean up the user data.
+        toplevel.xdg_toplevel.base.surface.data = 0;
 
         util.gpa.destroy(toplevel);
     }
@@ -218,7 +225,6 @@ pub const Toplevel = struct {
         _: *wl.Listener(*wlr.XdgPopup),
         wlr_xdg_popup: *wlr.XdgPopup,
     ) void {
-        // const toplevel: *Toplevel = @fieldParentPtr("new_popup", listener);
         Popup.create(wlr_xdg_popup) catch {
             wlr_xdg_popup.resource.postNoMemory();
             return;
