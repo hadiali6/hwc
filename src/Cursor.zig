@@ -130,7 +130,13 @@ pub const Cursor = struct {
     }
 
     fn move(self: *Cursor) void {
-        const toplevel = self.grabbed_toplevel.?;
+        const toplevel: *Toplevel = server.cursor.grabbed_toplevel orelse blk: {
+            const toplevel_result_at_cursor = server.toplevelAt(
+                server.cursor.wlr_cursor.x,
+                server.cursor.wlr_cursor.y,
+            ) orelse return;
+            break :blk toplevel_result_at_cursor.toplevel;
+        };
 
         toplevel.geometry.x = @as(
             i32,
@@ -148,7 +154,13 @@ pub const Cursor = struct {
     }
 
     fn resize(self: *Cursor) void {
-        const toplevel: *Toplevel = self.grabbed_toplevel.?;
+        const toplevel: *Toplevel = server.cursor.grabbed_toplevel orelse blk: {
+            const toplevel_result_at_cursor = server.toplevelAt(
+                server.cursor.wlr_cursor.x,
+                server.cursor.wlr_cursor.y,
+            ) orelse return;
+            break :blk toplevel_result_at_cursor.toplevel;
+        };
 
         const border_x = @as(
             i32,
