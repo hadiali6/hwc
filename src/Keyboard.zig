@@ -12,6 +12,8 @@ const server = &@import("main.zig").server;
 
 const log = std.log.scoped(.keyboard);
 
+var moving: bool = false;
+
 pub const Keyboard = struct {
     link: wl.list.Link = undefined,
     device: *wlr.InputDevice,
@@ -150,32 +152,6 @@ fn normalBinds(keysym: xkb.Keysym) bool {
             if (toplevel.scene_tree.node.enabled) {
                 toplevel.xdg_toplevel.events.request_minimize.emit();
             }
-        },
-        // Move
-        xkb.Keysym.c => {
-            const toplevel: *Toplevel = server.cursor.grabbed_toplevel orelse blk: {
-                const toplevel_result_at_cursor = server.toplevelAt(
-                    server.cursor.wlr_cursor.x,
-                    server.cursor.wlr_cursor.y,
-                ) orelse return false;
-                break :blk toplevel_result_at_cursor.toplevel;
-            };
-
-            const focused_surface = server.seat.pointer_state.focused_surface orelse {
-                return false;
-            };
-
-            if (toplevel.xdg_toplevel.base.surface != focused_surface.getRootSurface()) {
-                return false;
-            }
-
-            server.cursor.mode = .move;
-
-            const node_x: f64 = @floatFromInt(toplevel.scene_tree.node.x);
-            const node_y: f64 = @floatFromInt(toplevel.scene_tree.node.y);
-
-            server.cursor.grab_x = server.cursor.wlr_cursor.x - node_x;
-            server.cursor.grab_y = server.cursor.wlr_cursor.y - node_y;
         },
         else => return false,
     }
