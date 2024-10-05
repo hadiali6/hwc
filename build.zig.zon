@@ -19,5 +19,9 @@
             .url = "https://codeberg.org/ifreund/zig-pixman/archive/v0.2.0.tar.gz",
             .hash = "12209db20ce873af176138b76632931def33a10539387cba745db72933c43d274d56",
         },
+        .ziglua = .{
+            .url = "git+https://github.com/natecraddock/ziglua#baba73e11b876036154eab1f9b35c906e926cf0d",
+            .hash = "12209737346f4f08b13eb0a78530cf259aa1a446ba7ee8b68cb736b4a154eeabbbcc",
+        },
     },
 }

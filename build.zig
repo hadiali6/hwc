@@ -5,6 +5,13 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const ziglua = b.dependency("ziglua", .{
+        .target = target,
+        .optimize = optimize,
+        .lang = .lua51,
+        .shared = true,
+    }).module("ziglua");
+
     const scanner = Scanner.create(b, .{});
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
     scanner.addSystemProtocol("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml");
@@ -38,7 +45,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const options = b.addOptions();
+    options.addOption([]const u8, "version", "0.0.1");
+    hwc_exe.root_module.addOptions("build_options", options);
+
     hwc_exe.linkLibC();
+
+    hwc_exe.root_module.addImport("ziglua", ziglua);
 
     hwc_exe.root_module.addImport("wayland", wayland);
     hwc_exe.root_module.addImport("xkbcommon", xkbcommon);

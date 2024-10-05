@@ -67,8 +67,8 @@ pub fn create(wlr_output: *wlr.Output) !*hwc.Output {
         }
     }
 
-    const output = try util.gpa.create(hwc.Output);
-    errdefer util.gpa.destroy(output);
+    const output = try util.allocator.create(hwc.Output);
+    errdefer util.allocator.destroy(output);
 
     output.* = .{
         .link = undefined,
@@ -234,5 +234,5 @@ fn handleDestroy(
 
     wlr_output.data = 0;
 
-    util.gpa.destroy(output);
+    util.allocator.destroy(output);
 }

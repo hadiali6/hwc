@@ -26,7 +26,7 @@ pub fn create(wlr_xdg_popup: *wlr.XdgPopup) error{OutOfMemory}!void {
         return error.OutOfMemory;
     };
     wlr_xdg_popup.base.data = @intFromPtr(scene_tree);
-    const popup = util.gpa.create(hwc.XdgPopup) catch {
+    const popup = util.allocator.create(hwc.XdgPopup) catch {
         log.err("failed to allocate new popup", .{});
         return error.OutOfMemory;
     };
@@ -48,5 +48,5 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     const popup: *hwc.XdgPopup = @fieldParentPtr("destroy", listener);
     popup.commit.link.remove();
     popup.destroy.link.remove();
-    util.gpa.destroy(popup);
+    util.allocator.destroy(popup);
 }

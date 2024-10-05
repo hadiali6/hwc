@@ -8,6 +8,7 @@ const xkb = @import("xkbcommon");
 
 const config = @import("config.zig");
 const hwc = @import("hwc.zig");
+const cstdlib = @import("c/stdlib.zig");
 
 wl_server: *wl.Server,
 backend: *wlr.Backend,
@@ -93,6 +94,16 @@ pub fn deinit(self: *hwc.Server) void {
     self.cursor.deinit();
     self.wl_server.destroyClients();
     self.wl_server.destroy();
+}
+
+pub fn start(self: *hwc.Server) ![]const u8 {
+    var buf: [11]u8 = undefined;
+    const socket = try self.wl_server.addSocketAuto(&buf);
+    try self.backend.start();
+    if (cstdlib.setenv("WAYLAND_DISPLAY", socket.ptr, 1) < 0) {
+        return error.SetenvError;
+    }
+    return socket;
 }
 
 const ToplevelAtResult = struct {

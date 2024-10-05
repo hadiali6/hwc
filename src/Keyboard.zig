@@ -9,8 +9,10 @@ const xkb = @import("xkbcommon");
 const config = @import("config.zig");
 const util = @import("util.zig");
 const hwc = @import("hwc.zig");
+const lua = @import("lua.zig");
 
-const server = &@import("root").server;
+const main = @import("root");
+const server = &main.server;
 
 link: wl.list.Link = undefined,
 device: *wlr.InputDevice,
@@ -21,8 +23,8 @@ key: wl.Listener(*wlr.Keyboard.event.Key) =
     wl.Listener(*wlr.Keyboard.event.Key).init(handleKey),
 
 pub fn create(device: *wlr.InputDevice) !void {
-    const keyboard = try util.gpa.create(hwc.Keyboard);
-    errdefer util.gpa.destroy(keyboard);
+    const keyboard = try util.allocator.create(hwc.Keyboard);
+    errdefer util.allocator.destroy(keyboard);
 
     keyboard.* = .{
         .device = device,
@@ -148,6 +150,10 @@ fn normalBinds(keysym: xkb.Keysym) bool {
             if (toplevel.scene_tree.node.enabled) {
                 toplevel.xdg_toplevel.events.request_minimize.emit();
             }
+        },
+        // Rerun config script.
+        xkb.Keysym.r => {
+            lua.runScript(main.lua_state) catch {};
         },
         else => return false,
     }

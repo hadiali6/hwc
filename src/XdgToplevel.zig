@@ -36,7 +36,7 @@ request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
     wl.Listener(*wlr.XdgToplevel.event.Resize).init(handleResize),
 
 pub fn create(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
-    const toplevel = util.gpa.create(hwc.XdgToplevel) catch {
+    const toplevel = util.allocator.create(hwc.XdgToplevel) catch {
         log.err("failed to allocate new toplevel", .{});
         return error.OutOfMemory;
     };
@@ -44,7 +44,7 @@ pub fn create(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
     toplevel.* = .{
         .xdg_toplevel = wlr_toplevel,
         .scene_tree = server.scene.tree.createSceneXdgSurface(wlr_toplevel.base) catch {
-            util.gpa.destroy(toplevel);
+            util.allocator.destroy(toplevel);
             log.err("failed to allocate new toplevel", .{});
             return error.OutOfMemory;
         },
@@ -116,7 +116,7 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     // The wlr_surface may outlive the wlr_xdg_toplevel so we must clean up the user data.
     toplevel.xdg_toplevel.base.surface.data = 0;
 
-    util.gpa.destroy(toplevel);
+    util.allocator.destroy(toplevel);
 }
 
 fn handleMove(
