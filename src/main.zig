@@ -1,10 +1,10 @@
 const std = @import("std");
+const log = std.log.scoped(.main);
+
 const wlr = @import("wlroots");
 
 const util = @import("util.zig");
-const Server = @import("Server.zig").Server;
-
-const log = std.log.scoped(.main);
+const hwc = @import("hwc.zig");
 
 const ArgsError = error{
     InvalidVerbosityLevel,
@@ -44,7 +44,7 @@ const help_message =
     \\
 ;
 
-pub var server: Server = undefined;
+pub var server: hwc.Server = undefined;
 
 const FlagHandler = struct {
     fn wrong(binary: []const u8) void {
