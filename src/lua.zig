@@ -11,6 +11,8 @@ const ziglua = @import("ziglua");
 const util = @import("util.zig");
 const api = @import("api.zig");
 
+const server = &@import("root").server;
+
 const Allocator = std.mem.Allocator;
 const Lua = ziglua.Lua;
 
@@ -19,7 +21,10 @@ pub fn init() !*Lua {
 
     lua.openLibs();
 
-    registerLuaGlobals(lua);
+    lua.registerFns("hwc", &[_]ziglua.FnReg{
+        .{ .name = "spawn", .func = ziglua.wrap(spawn) },
+        .{ .name = "exit", .func = ziglua.wrap(exit) },
+    });
 
     try setPackagePath(lua, util.allocator);
 
@@ -44,6 +49,10 @@ pub fn runScript(lua: *Lua) !void {
         lua.pop(1);
         return err;
     };
+}
+
+pub fn runString(lua: *Lua, str: [:0]const u8) !void {
+    try lua.doString(str);
 }
 
 fn setPackagePath(lua: *Lua, allocator: Allocator) !void {
@@ -92,10 +101,6 @@ fn getConfigPath(allocator: Allocator) ![:0]const u8 {
             return error.NoConfigFile;
         }
     };
-}
-
-fn registerLuaGlobals(lua: *Lua) void {
-    lua.register("spawn", ziglua.wrap(spawn));
 }
 
 fn spawn(lua: *Lua) i32 {
@@ -183,5 +188,10 @@ fn spawn(lua: *Lua) i32 {
     }
 
     api.spawn(cmd);
+    return 0;
+}
+
+fn exit(_: *Lua) i32 {
+    server.wl_server.terminate();
     return 0;
 }

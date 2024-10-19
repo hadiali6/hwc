@@ -20,8 +20,8 @@
             .hash = "12209db20ce873af176138b76632931def33a10539387cba745db72933c43d274d56",
         },
         .ziglua = .{
-            .url = "git+https://github.com/natecraddock/ziglua#baba73e11b876036154eab1f9b35c906e926cf0d",
-            .hash = "12209737346f4f08b13eb0a78530cf259aa1a446ba7ee8b68cb736b4a154eeabbbcc",
+            .url = "git+https://github.com/natecraddock/ziglua?ref=zig-0.13.0#1c61975335a06aec085666ff77f90c3e0f2deb9f",
+            .hash = "12201ce9201a5e29f30b46423483a1221f8929cb72d79d25a5ef1975b2b7ea42afb2",
         },
     },
 }

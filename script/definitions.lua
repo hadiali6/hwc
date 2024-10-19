@@ -1,5 +1,10 @@
 ---@meta
 
+hwc = {}
+
+---Terminate the compositor.
+function hwc.exit() end
+
 ---@param cmd string # command to run.
 ---@param request_pid boolean? # if true, get pid of created process.
 ---@param request_stdin_fd boolean? # if true, get file descriptor of the process stdin.
@@ -9,4 +14,4 @@
 ---@return integer? # stdin_fd if requested.
 ---@return integer? # stdout_fd if requested.
 ---@return integer? # stderr_fd if requested.
-function spawn(cmd, request_pid, request_stdin_fd, request_stdout_fd, request_stderr_fd) end
+function hwc.spawn(cmd, request_pid, request_stdin_fd, request_stdout_fd, request_stderr_fd) end
