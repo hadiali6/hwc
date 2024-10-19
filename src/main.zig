@@ -90,12 +90,13 @@ pub fn main() !void {
 
     if (cli_args_result.flags.c) |config_path| {
         log.info("setting config path to {s}", .{config_path});
+        //TODO: set different config path.
     }
 
     api.processSetup();
 
     lua_state = try lua.init();
-    defer lua.deinit(lua_state);
+    defer lua_state.deinit();
 
     wlr.log.init(wlr_log_level, null);
 

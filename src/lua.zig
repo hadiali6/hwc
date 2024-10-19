@@ -15,7 +15,7 @@ const Allocator = std.mem.Allocator;
 const Lua = ziglua.Lua;
 
 pub fn init() !*Lua {
-    var lua = try Lua.init(&util.allocator);
+    var lua = try Lua.init(util.allocator);
 
     lua.openLibs();
 
@@ -44,10 +44,6 @@ pub fn runScript(lua: *Lua) !void {
         lua.pop(1);
         return err;
     };
-}
-
-pub fn deinit(lua: *Lua) void {
-    lua.deinit();
 }
 
 fn setPackagePath(lua: *Lua, allocator: Allocator) !void {
