@@ -91,19 +91,29 @@ pub fn init(self: *hwc.Server) !void {
 }
 
 pub fn deinit(self: *hwc.Server) void {
-    self.cursor.deinit();
+    self.new_xdg_toplevel.link.remove();
+    self.new_toplevel_decoration.link.remove();
+
     self.wl_server.destroyClients();
+
+    self.backend.destroy();
+
+    self.renderer.destroy();
+    self.allocator.destroy();
+
+    self.cursor.deinit();
+
     self.wl_server.destroy();
 }
 
-pub fn start(self: *hwc.Server) ![]const u8 {
+pub fn start(self: *hwc.Server) !void {
     var buf: [11]u8 = undefined;
     const socket = try self.wl_server.addSocketAuto(&buf);
     try self.backend.start();
+    log.info("Setting WAYLAND_DISPLAY to {s}", .{socket});
     if (cstdlib.setenv("WAYLAND_DISPLAY", socket.ptr, 1) < 0) {
         return error.SetenvError;
     }
-    return socket;
 }
 
 const ToplevelAtResult = struct {

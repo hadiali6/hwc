@@ -102,7 +102,7 @@ pub fn main() !void {
     try server.init();
     defer server.deinit();
 
-    const socket = try server.start();
+    try server.start();
 
     if (cli_args_result.flags.s) |startup_cmd| {
         api.spawn(startup_cmd);
@@ -110,6 +110,5 @@ pub fn main() !void {
 
     try lua.runScript(lua_state);
 
-    log.info("Running compositor on WAYLAND_DISPLAY={s}\n", .{socket});
     server.wl_server.run();
 }
