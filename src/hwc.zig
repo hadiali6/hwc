@@ -6,3 +6,5 @@ pub const XdgDecoration = @import("Decoration.zig");
 pub const Server = @import("Server.zig");
 pub const Cursor = @import("Cursor.zig");
 pub const Keyboard = @import("Keyboard.zig");
+pub const Keybind = @import("Keybind.zig");
+pub const Config = @import("Config.zig");

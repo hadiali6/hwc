@@ -8,6 +8,7 @@ const posix = std.posix;
 
 const ziglua = @import("ziglua");
 
+const hwc = @import("hwc.zig");
 const util = @import("util.zig");
 const api = @import("api.zig");
 
@@ -24,6 +25,10 @@ pub fn init() !*Lua {
     lua.registerFns("hwc", &[_]ziglua.FnReg{
         .{ .name = "spawn", .func = ziglua.wrap(spawn) },
         .{ .name = "exit", .func = ziglua.wrap(exit) },
+        .{ .name = "reload", .func = ziglua.wrap(reload) },
+        .{ .name = "add_keybind", .func = ziglua.wrap(addKeybind) },
+        .{ .name = "remove_keybind", .func = ziglua.wrap(removeKeybind) },
+        .{ .name = "remove_keybind_by_id", .func = ziglua.wrap(removeKeybindById) },
     });
 
     try setPackagePath(lua, util.allocator);
@@ -194,4 +199,154 @@ fn spawn(lua: *Lua) i32 {
 fn exit(_: *Lua) i32 {
     server.wl_server.terminate();
     return 0;
+}
+
+fn reload(lua: *Lua) i32 {
+    server.config.keybinds.clearAndFree(util.allocator);
+    runScript(lua) catch unreachable;
+    return 0;
+}
+
+fn addKeybind(lua: *Lua) i32 {
+    if (!lua.isString(1)) {
+        lua.raiseErrorStr("key is not a string", .{});
+        return 0;
+    }
+    if (!lua.isString(2)) {
+        lua.raiseErrorStr("modifiers is not a string", .{});
+        return 0;
+    }
+    if (!lua.isBoolean(3)) {
+        lua.raiseErrorStr("is_repeat is not a boolean", .{});
+        return 0;
+    }
+    if (!lua.isBoolean(4)) {
+        lua.raiseErrorStr("is_on_release is not a boolean", .{});
+        return 0;
+    }
+    if (!lua.isNumber(5) and !lua.isNil(5)) {
+        lua.raiseErrorStr("layout_index is not a integer", .{});
+        return 0;
+    }
+    if (!lua.isFunction(6)) {
+        lua.raiseErrorStr("callback is not a function", .{});
+        return 0;
+    }
+
+    {
+        const keysym = blk: {
+            const key_str = lua.toString(1) catch unreachable;
+            break :blk hwc.Keybind.parseKeysym(key_str) catch {
+                lua.raiseErrorStr("unable to parse key", .{});
+                return 0;
+            };
+        };
+        const modifiers = blk: {
+            const modifiers_str = lua.toString(2) catch unreachable;
+            break :blk hwc.Keybind.parseModifiers(modifiers_str) catch {
+                lua.raiseErrorStr("unable to parse modifiers", .{});
+                return 0;
+            };
+        };
+        const is_repeat = lua.toBoolean(3);
+        const is_on_release = lua.toBoolean(4);
+        const layout_index = lua.toInteger(5) catch null;
+
+        const keybind = hwc.Keybind{
+            .keysym = keysym,
+            .modifiers = modifiers,
+            .id = @intCast(server.config.keybinds.items.len),
+            .exec_on_release = is_on_release,
+            .repeat = is_repeat,
+            .layout_index = if (layout_index) |i| @intCast(i) else null,
+        };
+
+        // Repeating mappings borrow the Mapping directly. To prevent a possible
+        // crash if the Mapping ArrayList is reallocated, stop any currently
+        // repeating mappings.
+        server.clearRepeatingMapping();
+        server.config.keybinds.append(util.allocator, keybind) catch {
+            lua.raiseErrorStr("allocation failed.", .{});
+            return 0;
+        };
+    }
+
+    var keybind = &server.config.keybinds.items[server.config.keybinds.items.len - 1];
+
+    // Remove the old reference if one exists
+    if (keybind.lua_fn_reference != ziglua.ref_nil) {
+        lua.unref(ziglua.registry_index, keybind.lua_fn_reference);
+    }
+
+    // Copy the function to the top of the stack
+    lua.pushValue(6);
+    // Store the function reference in the Lua registry and remove from the stack
+    keybind.lua_fn_reference = lua.ref(ziglua.registry_index) catch unreachable;
+
+    lua.pushInteger(@intCast(keybind.id));
+
+    return 1;
+}
+
+fn removeKeybind(lua: *Lua) i32 {
+    if (!lua.isString(1)) {
+        lua.raiseErrorStr("Key is not a string", .{});
+        return 0;
+    }
+    if (!lua.isString(2)) {
+        lua.raiseErrorStr("Modifiers is not a string", .{});
+        return 0;
+    }
+
+    var index: u32 = 0;
+    const found_keybind: ?hwc.Keybind = blk: {
+        const keysym = inner: {
+            const keybind_str = lua.toString(1) catch unreachable;
+            break :inner hwc.Keybind.parseKeysym(keybind_str) catch unreachable;
+        };
+
+        const modifiers = inner: {
+            const modifiers_str = lua.toString(2) catch unreachable;
+            break :inner hwc.Keybind.parseModifiers(modifiers_str) catch unreachable;
+        };
+
+        for (server.config.keybinds.items) |keybind| {
+            if (keybind.keysym == keysym and
+                std.meta.eql(keybind.modifiers, modifiers))
+            {
+                break :blk keybind;
+            }
+            index += 1;
+        }
+        break :blk null;
+    };
+
+    if (found_keybind == null) {
+        lua.pushBoolean(false);
+        return 1;
+    }
+
+    _ = server.config.keybinds.orderedRemove(index);
+
+    lua.pushBoolean(false);
+    return 1;
+}
+
+fn removeKeybindById(lua: *Lua) i32 {
+    if (!lua.isNumber(1)) {
+        lua.raiseErrorStr("Key is not a integer", .{});
+        return 0;
+    }
+
+    const id = lua.toInteger(1) catch unreachable;
+    for (server.config.keybinds.items, 0..) |keybind, index| {
+        if (keybind.id == id) {
+            _ = server.config.keybinds.orderedRemove(index);
+            lua.pushBoolean(true);
+            return 1;
+        }
+    }
+
+    lua.pushBoolean(false);
+    return 1;
 }

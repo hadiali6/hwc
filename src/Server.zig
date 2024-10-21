@@ -6,7 +6,6 @@ const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
-const config = @import("config.zig");
 const hwc = @import("hwc.zig");
 const cstdlib = @import("c/stdlib.zig");
 
@@ -40,17 +39,27 @@ xdg_decoration_manager: *wlr.XdgDecorationManagerV1,
 new_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) =
     wl.Listener(*wlr.XdgToplevelDecorationV1).init(handleNewToplevelDecoration),
 
+config: hwc.Config,
 cursor: hwc.Cursor,
 output_manager: hwc.OutputManager,
 
+/// Timer for repeating keyboard mappings
+keybind_repeat_timer: *wl.EventSource,
+
+/// Currently repeating mapping, if any
+repeating_keybind: ?*const hwc.Keybind = null,
+
 pub fn init(self: *hwc.Server) !void {
     const wl_server = try wl.Server.create();
-    const loop = wl_server.getEventLoop();
+    const event_loop = wl_server.getEventLoop();
     var session: ?*wlr.Session = undefined;
-    const backend = try wlr.Backend.autocreate(loop, &session);
+    const backend = try wlr.Backend.autocreate(event_loop, &session);
     const renderer = try wlr.Renderer.autocreate(backend);
     const output_layout = try wlr.OutputLayout.create(wl_server);
     const scene = try wlr.Scene.create();
+
+    const keybind_repeat_timer = try event_loop.addTimer(*hwc.Server, handleMappingRepeatTimeout, self);
+    errdefer keybind_repeat_timer.remove();
 
     self.* = .{
         .wl_server = wl_server,
@@ -66,10 +75,9 @@ pub fn init(self: *hwc.Server) !void {
         .xdg_decoration_manager = try wlr.XdgDecorationManagerV1.create(wl_server),
         .cursor = undefined,
         .output_manager = undefined,
+        .config = undefined,
+        .keybind_repeat_timer = keybind_repeat_timer,
     };
-
-    try self.cursor.init();
-    try self.output_manager.init();
 
     try self.renderer.initServer(wl_server);
 
@@ -88,9 +96,14 @@ pub fn init(self: *hwc.Server) !void {
     self.seat.events.request_set_cursor.add(&self.request_set_cursor);
     self.seat.events.request_set_selection.add(&self.request_set_selection);
     self.keyboards.init();
+
+    try self.config.init();
+    try self.cursor.init();
+    try self.output_manager.init();
 }
 
 pub fn deinit(self: *hwc.Server) void {
+    self.keybind_repeat_timer.remove();
     self.new_xdg_toplevel.link.remove();
     self.new_toplevel_decoration.link.remove();
 
@@ -250,4 +263,24 @@ fn handleNewToplevelDecoration(
     wlr_xdg_decoration: *wlr.XdgToplevelDecorationV1,
 ) void {
     hwc.XdgDecoration.init(wlr_xdg_decoration);
+}
+
+/// Repeat key mapping
+fn handleMappingRepeatTimeout(self: *hwc.Server) c_int {
+    if (self.repeating_keybind) |keybind| {
+        const rate = self.config.keyboard_repeat_rate;
+        const ms_delay = if (rate > 0) 1000 / rate else 0;
+        self.keybind_repeat_timer.timerUpdate(ms_delay) catch {
+            log.err("failed to update mapping repeat timer", .{});
+        };
+        keybind.runLuaCallback() catch {};
+    }
+    return 0;
+}
+
+pub fn clearRepeatingMapping(self: *hwc.Server) void {
+    self.keybind_repeat_timer.timerUpdate(0) catch {
+        log.err("failed to clear mapping repeat timer", .{});
+    };
+    self.repeating_keybind = null;
 }

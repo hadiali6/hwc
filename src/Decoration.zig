@@ -5,7 +5,6 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const config = @import("config.zig");
 const hwc = @import("hwc.zig");
 
 const server = &@import("root").server;
@@ -33,7 +32,7 @@ fn handleSetDecorationMode(
     _: *wlr.XdgToplevelDecorationV1,
 ) void {
     const decoration: *hwc.XdgDecoration = @fieldParentPtr("request_mode", listener);
-    _ = decoration.wlr_xdg_decoration.setMode(config.decoration_mode);
+    _ = decoration.wlr_xdg_decoration.setMode(server.config.decoration_mode);
 }
 
 fn handleDestroy(
