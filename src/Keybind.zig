@@ -154,5 +154,9 @@ pub fn runLuaCallback(self: *const hwc.Keybind) !void {
         return error.NoLuaFunctionStored;
     }
     _ = lua_state.*.rawGetIndex(ziglua.registry_index, self.lua_fn_reference);
-    try lua_state.*.protectedCall(0, 0, 0);
+    try lua_state.*.protectedCall(.{
+        .args = 0,
+        .results = 0,
+        .msg_handler = 0,
+    });
 }

@@ -4,12 +4,12 @@
     .paths = .{""},
     .dependencies = .{
         .@"zig-wayland" = .{
-            .url = "https://codeberg.org/ifreund/zig-wayland/archive/v0.2.0.tar.gz",
-            .hash = "1220687c8c47a48ba285d26a05600f8700d37fc637e223ced3aa8324f3650bf52242",
+            .url = "https://codeberg.org/ifreund/zig-wayland/archive/b72ef788eb5da9957c21cc50772e3ff7bc77a69d.tar.gz",
+            .hash = "122008883160591808fa8244b73fe893ac696efb2aa0dcdc88b9c1fbff1703aada73",
         },
         .@"zig-wlroots" = .{
-            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/v0.18.0.tar.gz",
-            .hash = "12204d789e17c158971f69c7b900e8d8f288e7b9e42b2242f3adfbca57e8266d848f",
+            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/cf8b8d55ec31ab71559ff6527b756e5312c6e60d.tar.gz",
+            .hash = "122018bad9795d4d81c10a0766b47c712945baa9aaaed699b083c2f9ca31f643d8f2",
         },
         .@"zig-xkbcommon" = .{
             .url = "https://codeberg.org/ifreund/zig-xkbcommon/archive/v0.2.0.tar.gz",
@@ -20,8 +20,8 @@
             .hash = "12209db20ce873af176138b76632931def33a10539387cba745db72933c43d274d56",
         },
         .ziglua = .{
-            .url = "git+https://github.com/natecraddock/ziglua?ref=zig-0.13.0#1c61975335a06aec085666ff77f90c3e0f2deb9f",
-            .hash = "12201ce9201a5e29f30b46423483a1221f8929cb72d79d25a5ef1975b2b7ea42afb2",
+            .url = "https://github.com/natecraddock/ziglua/archive/67e12ea3cd80fc1d12a0c4790369da6d09163d04.tar.gz",
+            .hash = "12202f4249188ea25db5865f392be775958991d44898df69242b41e446a92c41dc7f",
         },
     },
 }
