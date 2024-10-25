@@ -16,6 +16,10 @@ renderer: *wlr.Renderer,
 allocator: *wlr.Allocator,
 scene: *wlr.Scene,
 
+shm: *wlr.Shm,
+drm: ?*wlr.Drm = null,
+linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
+
 output_layout: *wlr.OutputLayout,
 scene_output_layout: *wlr.SceneOutputLayout,
 new_output: wl.Listener(*wlr.Output) =
@@ -67,6 +71,7 @@ pub fn init(self: *hwc.Server) !void {
         .session = session,
         .renderer = renderer,
         .allocator = try wlr.Allocator.autocreate(backend, renderer),
+        .shm = try wlr.Shm.createWithRenderer(wl_server, 1, renderer),
         .scene = scene,
         .output_layout = output_layout,
         .scene_output_layout = try scene.attachOutputLayout(output_layout),
@@ -79,7 +84,10 @@ pub fn init(self: *hwc.Server) !void {
         .keybind_repeat_timer = keybind_repeat_timer,
     };
 
-    try self.renderer.initServer(wl_server);
+    if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
+        self.drm = try wlr.Drm.create(wl_server, renderer);
+        self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 4, renderer);
+    }
 
     _ = try wlr.Compositor.create(self.wl_server, 6, self.renderer);
     _ = try wlr.Subcompositor.create(self.wl_server);
