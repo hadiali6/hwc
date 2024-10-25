@@ -62,6 +62,8 @@ primary_selection_manager: *wlr.PrimarySelectionDeviceManagerV1,
 data_control_manager: *wlr.DataControlManagerV1,
 export_dmabuf_manager: *wlr.ExportDmabufManagerV1,
 screencopy_manager: *wlr.ScreencopyManagerV1,
+xdg_output_manager: *wlr.XdgOutputManagerV1,
+presentation: *wlr.Presentation,
 
 pub fn init(self: *hwc.Server) !void {
     const wl_server = try wl.Server.create();
@@ -101,6 +103,8 @@ pub fn init(self: *hwc.Server) !void {
         .data_control_manager = try wlr.DataControlManagerV1.create(wl_server),
         .export_dmabuf_manager = try wlr.ExportDmabufManagerV1.create(wl_server),
         .screencopy_manager = try wlr.ScreencopyManagerV1.create(wl_server),
+        .xdg_output_manager = try wlr.XdgOutputManagerV1.create(wl_server, output_layout),
+        .presentation = try wlr.Presentation.create(wl_server, backend),
     };
 
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
