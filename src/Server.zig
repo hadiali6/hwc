@@ -53,6 +53,16 @@ keybind_repeat_timer: *wl.EventSource,
 /// Currently repeating mapping, if any
 repeating_keybind: ?*const hwc.Keybind = null,
 
+security_context_manager: *wlr.SecurityContextManagerV1,
+single_pixel_buffer_manager: *wlr.SinglePixelBufferManagerV1,
+viewporter: *wlr.Viewporter,
+fractional_scale_manager: *wlr.FractionalScaleManagerV1,
+data_device_manager: *wlr.DataDeviceManager,
+primary_selection_manager: *wlr.PrimarySelectionDeviceManagerV1,
+data_control_manager: *wlr.DataControlManagerV1,
+export_dmabuf_manager: *wlr.ExportDmabufManagerV1,
+screencopy_manager: *wlr.ScreencopyManagerV1,
+
 pub fn init(self: *hwc.Server) !void {
     const wl_server = try wl.Server.create();
     const event_loop = wl_server.getEventLoop();
@@ -82,6 +92,15 @@ pub fn init(self: *hwc.Server) !void {
         .output_manager = undefined,
         .config = undefined,
         .keybind_repeat_timer = keybind_repeat_timer,
+        .security_context_manager = try wlr.SecurityContextManagerV1.create(wl_server),
+        .single_pixel_buffer_manager = try wlr.SinglePixelBufferManagerV1.create(wl_server),
+        .viewporter = try wlr.Viewporter.create(wl_server),
+        .fractional_scale_manager = try wlr.FractionalScaleManagerV1.create(wl_server, 1),
+        .data_device_manager = try wlr.DataDeviceManager.create(wl_server),
+        .primary_selection_manager = try wlr.PrimarySelectionDeviceManagerV1.create(wl_server),
+        .data_control_manager = try wlr.DataControlManagerV1.create(wl_server),
+        .export_dmabuf_manager = try wlr.ExportDmabufManagerV1.create(wl_server),
+        .screencopy_manager = try wlr.ScreencopyManagerV1.create(wl_server),
     };
 
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
