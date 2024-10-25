@@ -83,17 +83,24 @@ fn handleKey(
         if (!(event.state == .released) and ttyKeybinds(sym)) return;
     }
 
-    const keybind_was_run = handleKeybind(
+    const keybind_was_run = if (event.state == .pressed) handleKeybind(
         keycode,
         modifiers,
         event.state == .released,
         xkb_state,
-    );
+    ) else false;
 
     if (!keybind_was_run) {
         server.seat.setKeyboard(wlr_keyboard);
         server.seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
     }
+
+    if (event.state == .released) _ = handleKeybind(
+        keycode,
+        modifiers,
+        event.state == .released,
+        xkb_state,
+    );
 }
 
 /// Handle hardcoded VT switching keybinds.
@@ -122,7 +129,6 @@ pub fn handleKeybind(
     released: bool,
     xkb_state: *xkb.State,
 ) bool {
-    log.debug("{} {} {}, {}", .{ keycode, modifiers, released, xkb_state });
     // It is possible for more than one mapping to be matched due to the
     // existence of layout-independent mappings. It is also possible due to
     // translation by xkbcommon consuming modifiers. On the swedish layout
@@ -169,11 +175,7 @@ pub fn handleKeybind(
                 log.err("failed to update mapping repeat timer", .{});
             };
         }
-        log.info("Attempt to run function for keybind", .{});
-        keybind.runLuaCallback() catch {
-            return false;
-        };
-
+        keybind.runLuaCallback() catch return false;
         return true;
     }
 

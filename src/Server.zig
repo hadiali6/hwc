@@ -7,7 +7,7 @@ const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
 const hwc = @import("hwc.zig");
-const cstdlib = @import("c/stdlib.zig");
+const c = @import("c.zig");
 
 wl_server: *wl.Server,
 backend: *wlr.Backend,
@@ -124,7 +124,7 @@ pub fn start(self: *hwc.Server) !void {
     const socket = try self.wl_server.addSocketAuto(&buf);
     try self.backend.start();
     log.info("Setting WAYLAND_DISPLAY to {s}", .{socket});
-    if (cstdlib.setenv("WAYLAND_DISPLAY", socket.ptr, 1) < 0) {
+    if (c.setenv("WAYLAND_DISPLAY", socket.ptr, 1) < 0) {
         return error.SetenvError;
     }
 }
