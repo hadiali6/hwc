@@ -25,7 +25,7 @@ request_state: wl.Listener(*wlr.Output.event.RequestState) =
 destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleDestroy),
 
 // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
-pub fn create(wlr_output: *wlr.Output) !*hwc.Output {
+pub fn create(wlr_output: *wlr.Output) !void {
     if (!wlr_output.initRender(server.allocator, server.renderer)) {
         return error.InitRenderFailed;
     }
@@ -89,7 +89,7 @@ pub fn create(wlr_output: *wlr.Output) !*hwc.Output {
 
     wlr_output.data = @intFromPtr(output);
 
-    return output;
+    server.all_outputs.append(output);
 }
 
 /// Return the current configuration of the output.

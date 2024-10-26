@@ -11,9 +11,6 @@ const server = &@import("root").server;
 
 manager: *wlr.OutputManagerV1,
 
-/// All the outputs known to the manager.
-outputs: wl.list.Head(hwc.Output, .link),
-
 /// The configuration that is currently being applied.
 pending_config: ?*wlr.OutputConfigurationV1 = null,
 
@@ -31,9 +28,8 @@ destroy: wl.Listener(*wlr.OutputManagerV1) =
 pub fn init(self: *hwc.OutputManager) !void {
     self.* = .{
         .manager = try wlr.OutputManagerV1.create(server.wl_server),
-        .outputs = undefined,
     };
-    self.outputs.init();
+
     self.manager.events.apply.add(&self.apply_config);
     self.manager.events.@"test".add(&self.test_config);
     self.manager.events.destroy.add(&self.destroy);
@@ -48,7 +44,7 @@ pub fn sendConfig(self: *hwc.OutputManager) !void {
     };
     errdefer config.destroy();
 
-    var iterator = self.outputs.iterator(.forward);
+    var iterator = server.all_outputs.iterator(.forward);
     while (iterator.next()) |output| {
         _ = output.createHead(config) catch {
             return error.ConfigHeadCreateOOM;
@@ -62,7 +58,7 @@ pub fn finishConfiguration(self: *hwc.OutputManager) void {
     std.debug.assert(self.pending_outputs == 0);
     log.info("Configuration succeeded", .{});
 
-    var iterator = self.outputs.iterator(.forward);
+    var iterator = server.all_outputs.iterator(.forward);
     while (iterator.next()) |output| {
         output.previous_config = null;
         output.pending_config = null;
@@ -86,7 +82,7 @@ pub fn cancelConfiguration(self: *hwc.OutputManager) void {
         if (self.pending_outputs != 0) {
             log.warn("tried to cancel a cancellation. stopping at current state", .{});
 
-            var iterator = self.outputs.iterator(.forward);
+            var iterator = server.all_outputs.iterator(.forward);
             while (iterator.next()) |output| {
                 output.previous_config = null;
                 output.pending_config = null;
@@ -126,9 +122,7 @@ pub fn cancelConfiguration(self: *hwc.OutputManager) void {
 }
 
 /// Add a new output.
-pub fn addOutput(self: *hwc.OutputManager, output: *hwc.Output) void {
-    self.outputs.append(output);
-
+pub fn addOutput(self: *hwc.OutputManager) void {
     // Keep things simple and don't allow modifying the pending configuration.
     // Just cancel everything and let the client retry. This won't work very
     // well if a failed configuration is currently being cancelled, but that's

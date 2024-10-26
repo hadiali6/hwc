@@ -26,6 +26,7 @@ output_layout: *wlr.OutputLayout,
 scene_output_layout: *wlr.SceneOutputLayout,
 new_output: wl.Listener(*wlr.Output) =
     wl.Listener(*wlr.Output).init(handleNewOutput),
+all_outputs: wl.list.Head(hwc.Output, .link),
 
 xdg_shell: *wlr.XdgShell,
 new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) =
@@ -92,6 +93,7 @@ pub fn init(self: *hwc.Server) !void {
         .output_layout = output_layout,
         .scene_output_layout = try scene.attachOutputLayout(output_layout),
         .output_manager = undefined,
+        .all_outputs = undefined,
         .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
         .mapped_toplevels = undefined,
         .seat = try wlr.Seat.create(wl_server, "default"),
@@ -116,6 +118,8 @@ pub fn init(self: *hwc.Server) !void {
         self.drm = try wlr.Drm.create(wl_server, renderer);
         self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 4, renderer);
     }
+
+    self.all_outputs.init();
 
     self.backend.events.new_output.add(&self.new_output);
 
@@ -228,13 +232,13 @@ fn handleNewOutput(
 ) void {
     const server: *hwc.Server = @fieldParentPtr("new_output", listener);
 
-    const output = hwc.Output.create(wlr_output) catch |err| {
+    hwc.Output.create(wlr_output) catch |err| {
         log.err("failed to allocate new output {}", .{err});
         wlr_output.destroy();
         return;
     };
 
-    server.output_manager.addOutput(output);
+    server.output_manager.addOutput();
 }
 
 fn handleNewXdgToplevel(
