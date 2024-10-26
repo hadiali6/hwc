@@ -16,10 +16,17 @@ destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
 pub fn create(wlr_xdg_popup: *wlr.XdgPopup) error{OutOfMemory}!void {
     // These asserts are fine since tinywl.zig doesn't support anything else that can
     // make xdg popups (e.g. layer shell).
-    const parent = wlr.XdgSurface.tryFromWlrSurface(wlr_xdg_popup.parent.?) orelse return;
-    const parent_tree = @as(?*wlr.SceneTree, @ptrFromInt(parent.data)) orelse {
-        // The xdg surface user data could be left null due to allocation failure.
-        return error.OutOfMemory;
+    const parent_tree = blk: {
+        const parent = wlr.XdgSurface.tryFromWlrSurface(wlr_xdg_popup.parent.?) orelse return;
+        const parent_toplevel = @as(
+            ?*hwc.XdgToplevel,
+            @ptrFromInt(parent.data),
+        ) orelse {
+            // The xdg surface user data could be left null due to allocation failure.
+            return error.OutOfMemory;
+        };
+
+        break :blk parent_toplevel.scene_tree;
     };
     const scene_tree = parent_tree.createSceneXdgSurface(wlr_xdg_popup.base) catch {
         log.err("failed to allocate xdg popup node", .{});
