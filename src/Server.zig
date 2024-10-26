@@ -14,6 +14,8 @@ backend: *wlr.Backend,
 session: ?*wlr.Session,
 renderer: *wlr.Renderer,
 allocator: *wlr.Allocator,
+compositor: *wlr.Compositor,
+subcompositor: *wlr.Subcompositor,
 scene: *wlr.Scene,
 
 shm: *wlr.Shm,
@@ -28,7 +30,7 @@ new_output: wl.Listener(*wlr.Output) =
 xdg_shell: *wlr.XdgShell,
 new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) =
     wl.Listener(*wlr.XdgToplevel).init(handleNewXdgToplevel),
-mapped_toplevels: wl.list.Head(hwc.XdgToplevel, .link) = undefined,
+mapped_toplevels: wl.list.Head(hwc.XdgToplevel, .link),
 
 seat: *wlr.Seat,
 new_input: wl.Listener(*wlr.InputDevice) =
@@ -83,15 +85,18 @@ pub fn init(self: *hwc.Server) !void {
         .session = session,
         .renderer = renderer,
         .allocator = try wlr.Allocator.autocreate(backend, renderer),
+        .compositor = try wlr.Compositor.create(self.wl_server, 6, self.renderer),
+        .subcompositor = try wlr.Subcompositor.create(self.wl_server),
         .shm = try wlr.Shm.createWithRenderer(wl_server, 1, renderer),
         .scene = scene,
         .output_layout = output_layout,
         .scene_output_layout = try scene.attachOutputLayout(output_layout),
-        .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
-        .seat = try wlr.Seat.create(wl_server, "default"),
-        .xdg_decoration_manager = try wlr.XdgDecorationManagerV1.create(wl_server),
-        .cursor = undefined,
         .output_manager = undefined,
+        .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
+        .mapped_toplevels = undefined,
+        .seat = try wlr.Seat.create(wl_server, "default"),
+        .cursor = undefined,
+        .xdg_decoration_manager = try wlr.XdgDecorationManagerV1.create(wl_server),
         .config = undefined,
         .keybind_repeat_timer = keybind_repeat_timer,
         .security_context_manager = try wlr.SecurityContextManagerV1.create(wl_server),
@@ -111,10 +116,6 @@ pub fn init(self: *hwc.Server) !void {
         self.drm = try wlr.Drm.create(wl_server, renderer);
         self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 4, renderer);
     }
-
-    _ = try wlr.Compositor.create(self.wl_server, 6, self.renderer);
-    _ = try wlr.Subcompositor.create(self.wl_server);
-    _ = try wlr.DataDeviceManager.create(self.wl_server);
 
     self.backend.events.new_output.add(&self.new_output);
 
