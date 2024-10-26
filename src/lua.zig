@@ -171,7 +171,10 @@ fn spawn(lua: *Lua) i32 {
     };
 
     if (stdin_fd_requested or stdout_fd_requested or stderr_fd_requested) {
-        const info: api.ProcessResult = api.pipedSpawnWithSteams(cmd).?;
+        const info: api.ProcessResult = api.pipedSpawnWithStreams(cmd) catch |err| {
+            log.debug("pipedSpawnWithStreams failed: {}", .{err});
+            return 0;
+        };
         log.debug("pid: {}, stdin_fd: {}, stdout_fd: {}, stderr_fd: {}", .{
             info.pid,
             info.stdin_fd,
@@ -186,13 +189,19 @@ fn spawn(lua: *Lua) i32 {
     }
 
     if (pid_requested) {
-        const pid: i32 = api.pipedSpawn(cmd);
+        const pid: i32 = api.pipedSpawn(cmd) catch |err| {
+            log.debug("pipedSpawn failed: {}", .{err});
+            return 0;
+        };
         log.debug("pid: {}", .{pid});
         lua.pushInteger(pid);
         return 1;
     }
 
-    api.spawn(cmd);
+    api.spawn(cmd) catch |err| {
+        log.debug("spawn failed: {}", .{err});
+    };
+
     return 0;
 }
 

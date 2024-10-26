@@ -106,7 +106,7 @@ pub fn main() !void {
     try server.start();
 
     if (cli_args_result.flags.s) |startup_cmd| {
-        api.spawn(startup_cmd);
+        try api.spawn(startup_cmd);
     }
 
     try lua.runScript(lua_state);

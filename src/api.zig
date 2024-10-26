@@ -69,17 +69,14 @@ fn cleanupChild() void {
     }
 }
 
-pub fn spawn(cmd: []const u8) void {
+pub fn spawn(cmd: []const u8) !void {
     const child_args = [_:null]?[*:0]u8{
         @constCast(@ptrCast("/bin/sh")),
         @constCast(@ptrCast("-c")),
         @constCast(@ptrCast(cmd)),
     };
 
-    const child_pid = posix.fork() catch {
-        log.err("fork failed", .{});
-        return;
-    };
+    const child_pid = try posix.fork();
 
     if (child_pid == 0) {
         cleanupChild();
@@ -105,44 +102,38 @@ pub fn spawn(cmd: []const u8) void {
     }
 }
 
-pub fn pipedSpawn(cmd: []const u8) posix.pid_t {
+pub fn pipedSpawn(cmd: []const u8) !pid_t {
     const child_args = [_:null]?[*:0]u8{
         @constCast(@ptrCast("/bin/sh")),
         @constCast(@ptrCast("-c")),
         @constCast(@ptrCast(cmd)),
     };
 
-    const pipe_fd: [2]fd_t = posix.pipe() catch {
-        log.err("pipe failed", .{});
-        return 0;
-    };
+    const pid_pipe_fd: [2]fd_t = try posix.pipe();
 
-    const child_pid = posix.fork() catch {
-        log.err("fork failed", .{});
-        return 0;
-    };
+    const child_pid = try posix.fork();
 
     if (child_pid == 0) {
-        posix.close(pipe_fd[0]);
+        posix.close(pid_pipe_fd[0]);
 
         cleanupChild();
 
         const grandchild_pid = posix.fork() catch posix.system._exit(1);
 
         if (grandchild_pid == 0) {
-            posix.close(pipe_fd[1]);
+            posix.close(pid_pipe_fd[1]);
             posix.execveZ("/bin/sh", &child_args, c.environ) catch
                 posix.system._exit(1);
         } else {
-            _ = posix.write(pipe_fd[1], mem.asBytes(&grandchild_pid)) catch {
+            _ = posix.write(pid_pipe_fd[1], mem.asBytes(&grandchild_pid)) catch {
                 log.err("write failed", .{});
                 return 0;
             };
-            posix.close(pipe_fd[1]);
+            posix.close(pid_pipe_fd[1]);
             posix.system._exit(0);
         }
     } else {
-        posix.close(pipe_fd[1]);
+        posix.close(pid_pipe_fd[1]);
         // Wait the intermediate child.
         const ret = posix.waitpid(child_pid, 0);
 
@@ -154,15 +145,9 @@ pub fn pipedSpawn(cmd: []const u8) posix.pid_t {
         }
 
         var grandchild_pid: pid_t = undefined;
-        const bytes_read = posix.read(
-            pipe_fd[0],
-            mem.asBytes(&grandchild_pid),
-        ) catch {
-            log.err("read failed", .{});
-            return 0;
-        };
+        const bytes_read = try posix.read(pid_pipe_fd[0], mem.asBytes(&grandchild_pid));
 
-        posix.close(pipe_fd[0]);
+        posix.close(pid_pipe_fd[0]);
         debug.assert(bytes_read == @sizeOf(pid_t));
 
         return grandchild_pid;
@@ -176,7 +161,7 @@ pub const ProcessResult = struct {
     stderr_fd: fd_t,
 };
 
-pub fn pipedSpawnWithSteams(cmd: []const u8) ?ProcessResult {
+pub fn pipedSpawnWithStreams(cmd: []const u8) !ProcessResult {
     const child_args = [_:null]?[*:0]u8{
         @constCast(@ptrCast("/bin/sh")),
         @constCast(@ptrCast("-c")),
@@ -190,69 +175,50 @@ pub fn pipedSpawnWithSteams(cmd: []const u8) ?ProcessResult {
         .stderr_fd = -1,
     };
 
-    const pipe_fd: [2]fd_t = posix.pipe() catch {
-        log.err("pipe failed", .{});
-        return null;
-    };
+    const pid_pipe_fd: [2]fd_t = try posix.pipe();
+    const stdin_pipe_fd: [2]fd_t = try posix.pipe();
+    const stdout_pipe_fd: [2]fd_t = try posix.pipe();
+    const stderr_pipe_fd: [2]fd_t = try posix.pipe();
 
-    const stdin_fd: [2]fd_t = posix.pipe() catch {
-        log.err("pipe failed", .{});
-        return null;
-    };
-
-    const stdout_fd: [2]fd_t = posix.pipe() catch {
-        log.err("pipe failed", .{});
-        return null;
-    };
-
-    const stderr_fd: [2]fd_t = posix.pipe() catch {
-        log.err("pipe failed", .{});
-        return null;
-    };
-
-    const child_pid = posix.fork() catch {
-        log.err("fork failed", .{});
-        return null;
-    };
+    const child_pid = try posix.fork();
 
     if (child_pid == 0) {
-        posix.close(pipe_fd[0]);
+        posix.close(pid_pipe_fd[0]);
 
         cleanupChild();
 
         const grandchild_pid = posix.fork() catch posix.system._exit(1);
 
         if (grandchild_pid == 0) {
-            posix.close(pipe_fd[1]);
+            posix.close(pid_pipe_fd[1]);
 
-            posix.dup2(stdin_fd[0], posix.STDIN_FILENO) catch posix.system._exit(1);
-            posix.dup2(stdout_fd[1], posix.STDOUT_FILENO) catch posix.system._exit(1);
-            posix.dup2(stderr_fd[1], posix.STDERR_FILENO) catch posix.system._exit(1);
+            posix.dup2(stdin_pipe_fd[0], posix.STDIN_FILENO) catch posix.system._exit(1);
+            posix.dup2(stdout_pipe_fd[1], posix.STDOUT_FILENO) catch posix.system._exit(1);
+            posix.dup2(stderr_pipe_fd[1], posix.STDERR_FILENO) catch posix.system._exit(1);
 
-            posix.close(stdin_fd[0]);
-            posix.close(stdin_fd[1]);
-            posix.close(stdout_fd[0]);
-            posix.close(stdout_fd[1]);
-            posix.close(stderr_fd[0]);
-            posix.close(stderr_fd[1]);
+            posix.close(stdin_pipe_fd[0]);
+            posix.close(stdin_pipe_fd[1]);
+            posix.close(stdout_pipe_fd[0]);
+            posix.close(stdout_pipe_fd[1]);
+            posix.close(stderr_pipe_fd[0]);
+            posix.close(stderr_pipe_fd[1]);
 
             posix.execveZ("/bin/sh", &child_args, c.environ) catch
                 posix.system._exit(1);
         } else {
             // Close the unused pipe ends in the child process
-            posix.close(stdin_fd[0]);
-            posix.close(stdout_fd[1]);
-            posix.close(stderr_fd[1]);
+            posix.close(stdin_pipe_fd[0]);
+            posix.close(stdout_pipe_fd[1]);
+            posix.close(stderr_pipe_fd[1]);
 
-            _ = posix.write(pipe_fd[1], mem.asBytes(&grandchild_pid)) catch {
-                log.err("write failed", .{});
-                return null;
+            _ = posix.write(pid_pipe_fd[1], mem.asBytes(&grandchild_pid)) catch {
+                posix.system._exit(1);
             };
-            posix.close(pipe_fd[1]);
+            posix.close(pid_pipe_fd[1]);
             posix.system._exit(0);
         }
     } else {
-        posix.close(pipe_fd[1]);
+        posix.close(pid_pipe_fd[1]);
         // Wait the intermediate child.
         const ret = posix.waitpid(child_pid, 0);
 
@@ -260,27 +226,21 @@ pub fn pipedSpawnWithSteams(cmd: []const u8) ?ProcessResult {
             (posix.W.IFEXITED(ret.status) and posix.W.EXITSTATUS(ret.status) != 0))
         {
             log.err("fork failed", .{});
-            return null;
+            return error.Unexpected;
         }
 
-        const bytes_read = posix.read(
-            pipe_fd[0],
-            mem.asBytes(&info.pid),
-        ) catch {
-            log.err("read failed", .{});
-            return null;
-        };
+        const bytes_read = try posix.read(pid_pipe_fd[0], mem.asBytes(&info.pid));
 
-        posix.close(pipe_fd[0]);
+        posix.close(pid_pipe_fd[0]);
         debug.assert(bytes_read == @sizeOf(pid_t));
 
-        info.stdin_fd = stdin_fd[0];
-        info.stdout_fd = stdout_fd[1];
-        info.stderr_fd = stderr_fd[1];
+        info.stdin_fd = stdin_pipe_fd[1];
+        info.stdout_fd = stdout_pipe_fd[0];
+        info.stderr_fd = stderr_pipe_fd[0];
 
-        posix.close(stdin_fd[0]);
-        posix.close(stdout_fd[1]);
-        posix.close(stderr_fd[1]);
+        posix.close(stdin_pipe_fd[0]);
+        posix.close(stdout_pipe_fd[1]);
+        posix.close(stderr_pipe_fd[1]);
 
         return info;
     }
