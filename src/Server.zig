@@ -18,6 +18,8 @@ compositor: *wlr.Compositor,
 subcompositor: *wlr.Subcompositor,
 scene: *wlr.Scene,
 
+renderer_lost: wl.Listener(void) = wl.Listener(void).init(handleRendererLost),
+
 shm: *wlr.Shm,
 drm: ?*wlr.Drm = null,
 linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
@@ -121,6 +123,7 @@ pub fn init(self: *hwc.Server) !void {
 
     self.all_outputs.init();
 
+    self.renderer.events.lost.add(&self.renderer_lost);
     self.backend.events.new_output.add(&self.new_output);
 
     self.xdg_shell.events.new_toplevel.add(&self.new_xdg_toplevel);
@@ -319,4 +322,37 @@ pub fn clearRepeatingMapping(self: *hwc.Server) void {
         log.err("failed to clear mapping repeat timer", .{});
     };
     self.repeating_keybind = null;
+}
+
+fn handleRendererLost(listener: *wl.Listener(void)) void {
+    const server: *hwc.Server = @fieldParentPtr("renderer_lost", listener);
+
+    const new_renderer = wlr.Renderer.autocreate(server.backend) catch {
+        log.err("failed to create new renderer after GPU reset", .{});
+        return;
+    };
+
+    const new_allocator = wlr.Allocator.autocreate(server.backend, server.renderer) catch {
+        new_renderer.destroy();
+        log.err("failed to create new allocator after GPU reset", .{});
+        return;
+    };
+
+    server.renderer_lost.link.remove();
+    new_renderer.events.lost.add(&server.renderer_lost);
+
+    server.compositor.setRenderer(new_renderer);
+
+    {
+        var iterator = server.all_outputs.iterator(.forward);
+        while (iterator.next()) |output| {
+            _ = output.wlr_output.initRender(new_allocator, new_renderer);
+        }
+    }
+
+    server.renderer.destroy();
+    server.renderer = new_renderer;
+
+    server.allocator.destroy();
+    server.allocator = new_allocator;
 }
