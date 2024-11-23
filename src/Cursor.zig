@@ -56,7 +56,7 @@ fn handleAxis(
     _: *wl.Listener(*wlr.Pointer.event.Axis),
     event: *wlr.Pointer.event.Axis,
 ) void {
-    server.seat.pointerNotifyAxis(
+    server.input_manager.seat.wlr_seat.pointerNotifyAxis(
         event.time_msec,
         event.orientation,
         event.delta,
@@ -72,7 +72,7 @@ fn handleButton(
 ) void {
     const cursor: *hwc.Cursor = @fieldParentPtr("button", listener);
 
-    _ = server.seat.pointerNotifyButton(
+    _ = server.input_manager.seat.wlr_seat.pointerNotifyButton(
         event.time_msec,
         event.button,
         event.state,
@@ -89,7 +89,7 @@ fn handleButton(
 }
 
 fn handleFrame(_: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
-    server.seat.pointerNotifyFrame();
+    server.input_manager.seat.wlr_seat.pointerNotifyFrame();
 }
 
 fn handleMotion(
@@ -119,20 +119,22 @@ fn processCursorMotion(self: *hwc.Cursor, time_msec: u32) void {
 }
 
 fn passthrough(self: *hwc.Cursor, time_msec: u32) void {
+    const wlr_seat = server.input_manager.seat.wlr_seat;
+
     if (server.toplevelAt(self.wlr_cursor.x, self.wlr_cursor.y)) |result| {
-        server.seat.pointerNotifyEnter(result.surface, result.sx, result.sy);
-        server.seat.pointerNotifyMotion(time_msec, result.sx, result.sy);
+        wlr_seat.pointerNotifyEnter(result.surface, result.sx, result.sy);
+        wlr_seat.pointerNotifyMotion(time_msec, result.sx, result.sy);
     } else {
         self.wlr_cursor.setXcursor(self.xcursor_manager, "default");
-        server.seat.pointerClearFocus();
+        wlr_seat.pointerClearFocus();
     }
 }
 
 fn move(self: *hwc.Cursor) void {
-    const toplevel: *hwc.XdgToplevel = server.cursor.grabbed_toplevel orelse blk: {
+    const toplevel: *hwc.XdgToplevel = self.grabbed_toplevel orelse blk: {
         const toplevel_result_at_cursor = server.toplevelAt(
-            server.cursor.wlr_cursor.x,
-            server.cursor.wlr_cursor.y,
+            self.wlr_cursor.x,
+            self.wlr_cursor.y,
         ) orelse return;
         break :blk toplevel_result_at_cursor.toplevel;
     };
@@ -153,10 +155,10 @@ fn move(self: *hwc.Cursor) void {
 }
 
 fn resize(self: *hwc.Cursor) void {
-    const toplevel: *hwc.XdgToplevel = server.cursor.grabbed_toplevel orelse blk: {
+    const toplevel: *hwc.XdgToplevel = self.grabbed_toplevel orelse blk: {
         const toplevel_result_at_cursor = server.toplevelAt(
-            server.cursor.wlr_cursor.x,
-            server.cursor.wlr_cursor.y,
+            self.wlr_cursor.x,
+            self.wlr_cursor.y,
         ) orelse return;
         break :blk toplevel_result_at_cursor.toplevel;
     };

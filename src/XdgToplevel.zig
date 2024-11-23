@@ -124,12 +124,12 @@ fn handleMove(
     _: *wlr.XdgToplevel.event.Move,
 ) void {
     const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_move", listener);
-    server.cursor.grabbed_toplevel = toplevel;
-    server.cursor.mode = .move;
-    server.cursor.grab_x = server.cursor.wlr_cursor.x -
-        @as(f64, @floatFromInt(toplevel.geometry.x));
-    server.cursor.grab_y = server.cursor.wlr_cursor.y -
-        @as(f64, @floatFromInt(toplevel.geometry.y));
+    var cursor: *hwc.Cursor = &server.input_manager.seat.cursor;
+
+    cursor.grabbed_toplevel = toplevel;
+    cursor.mode = .move;
+    cursor.grab_x = cursor.wlr_cursor.x - @as(f64, @floatFromInt(toplevel.geometry.x));
+    cursor.grab_y = cursor.wlr_cursor.y - @as(f64, @floatFromInt(toplevel.geometry.y));
 }
 
 fn handleResize(
@@ -137,22 +137,23 @@ fn handleResize(
     event: *wlr.XdgToplevel.event.Resize,
 ) void {
     const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_resize", listener);
+    var cursor: *hwc.Cursor = &server.input_manager.seat.cursor;
 
-    server.cursor.grabbed_toplevel = toplevel;
-    server.cursor.mode = .resize;
-    server.cursor.resize_edges = event.edges;
+    cursor.grabbed_toplevel = toplevel;
+    cursor.mode = .resize;
+    cursor.resize_edges = event.edges;
 
     var box: wlr.Box = undefined;
     toplevel.xdg_toplevel.base.getGeometry(&box);
 
     const border_x = toplevel.geometry.x + box.x + if (event.edges.right) box.width else 0;
     const border_y = toplevel.geometry.y + box.y + if (event.edges.bottom) box.height else 0;
-    server.cursor.grab_x = server.cursor.wlr_cursor.x - @as(f64, @floatFromInt(border_x));
-    server.cursor.grab_y = server.cursor.wlr_cursor.y - @as(f64, @floatFromInt(border_y));
+    cursor.grab_x = cursor.wlr_cursor.x - @as(f64, @floatFromInt(border_x));
+    cursor.grab_y = cursor.wlr_cursor.y - @as(f64, @floatFromInt(border_y));
 
-    server.cursor.grab_box = box;
-    server.cursor.grab_box.x += toplevel.geometry.x;
-    server.cursor.grab_box.y += toplevel.geometry.y;
+    cursor.grab_box = box;
+    cursor.grab_box.x += toplevel.geometry.x;
+    cursor.grab_box.y += toplevel.geometry.y;
 }
 
 fn requestMinimize(listener: *wl.Listener(void)) void {

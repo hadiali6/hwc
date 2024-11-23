@@ -8,3 +8,6 @@ pub const Cursor = @import("Cursor.zig");
 pub const Keyboard = @import("Keyboard.zig");
 pub const Keybind = @import("Keybind.zig");
 pub const Config = @import("Config.zig");
+
+pub const InputManager = @import("InputManager.zig");
+pub const Seat = @import("Seat.zig");
