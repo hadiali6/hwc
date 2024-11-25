@@ -14,22 +14,32 @@ var server = &@import("root").server;
 seat: hwc.Seat,
 devices: wl.list.Head(Device, .link),
 
+virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
+
 new_input: wl.Listener(*wlr.InputDevice) =
     wl.Listener(*wlr.InputDevice).init(handleNewInput),
+
+new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) =
+    wl.Listener(*wlr.VirtualKeyboardV1).init(handleNewVirtualKeyboard),
 
 pub fn init(self: *hwc.InputManager) !void {
     self.* = .{
         .seat = undefined,
         .devices = undefined,
+        .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(server.wl_server),
     };
 
     try self.seat.init();
     self.devices.init();
 
     server.backend.events.new_input.add(&self.new_input);
+    self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
 }
 
 pub fn deinit(self: *hwc.InputManager) void {
+    self.new_input.link.remove();
+    self.new_virtual_keyboard.link.remove();
+
     std.debug.assert(self.devices.empty());
     self.seat.deinit();
 }
@@ -39,7 +49,18 @@ fn handleNewInput(
     wlr_input_device: *wlr.InputDevice,
 ) void {
     const input_manager: *hwc.InputManager = @fieldParentPtr("new_input", listener);
+    input_manager.addDevice(wlr_input_device);
+}
 
+fn handleNewVirtualKeyboard(
+    listener: *wl.Listener(*wlr.VirtualKeyboardV1),
+    wlr_virtual_keyboard: *wlr.VirtualKeyboardV1,
+) void {
+    const input_manager: *hwc.InputManager = @fieldParentPtr("new_virtual_keyboard", listener);
+    input_manager.addDevice(&wlr_virtual_keyboard.keyboard.base);
+}
+
+fn addDevice(self: *hwc.InputManager, wlr_input_device: *wlr.InputDevice) void {
     switch (wlr_input_device.type) {
         .keyboard => {
             const keyboard = util.allocator.create(hwc.Keyboard) catch |err| {
@@ -73,7 +94,7 @@ fn handleNewInput(
                 return;
             };
 
-            input_manager.seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
+            self.seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
         },
         .touch, .tablet, .tablet_pad, .@"switch" => |device_type| {
             log.err("detected unsopported device: {s}", .{@tagName(device_type)});
