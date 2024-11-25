@@ -60,6 +60,7 @@ pub fn build(b: *std.Build) void {
     hwc_exe.linkSystemLibrary("wayland-server");
     hwc_exe.linkSystemLibrary("xkbcommon");
     hwc_exe.linkSystemLibrary("pixman-1");
+    hwc_exe.linkSystemLibrary("libinput");
 
     // TODO: remove when https://github.com/ziglang/zig/issues/131 is implemented
     scanner.addCSource(hwc_exe);

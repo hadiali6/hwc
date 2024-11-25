@@ -13,39 +13,68 @@ const lua = @import("lua.zig");
 
 const server = &@import("root").server;
 
-link: wl.list.Link = undefined,
-device: *wlr.InputDevice,
+device: hwc.InputManager.Device,
 
 modifiers: wl.Listener(*wlr.Keyboard) =
     wl.Listener(*wlr.Keyboard).init(handleModifiers),
 key: wl.Listener(*wlr.Keyboard.event.Key) =
     wl.Listener(*wlr.Keyboard.event.Key).init(handleKey),
 
-pub fn create(device: *wlr.InputDevice) !void {
-    const keyboard = try util.allocator.create(hwc.Keyboard);
-    errdefer util.allocator.destroy(keyboard);
-
-    keyboard.* = .{
-        .device = device,
+pub fn init(self: *hwc.Keyboard, wlr_input_device: *wlr.InputDevice) !void {
+    self.* = .{
+        .device = undefined,
     };
+
+    try self.device.init(wlr_input_device);
+    errdefer self.device.deinit();
 
     const context = xkb.Context.new(.no_flags) orelse return error.ContextFailed;
     defer context.unref();
+
     const keymap = xkb.Keymap.newFromNames(context, null, .no_flags) orelse return error.KeymapFailed;
     defer keymap.unref();
 
-    const wlr_keyboard = device.toKeyboard();
-    if (!wlr_keyboard.setKeymap(keymap)) return error.SetKeymapFailed;
+    const wlr_keyboard = wlr_input_device.toKeyboard();
+    wlr_keyboard.data = @intFromPtr(self);
+
+    if (!wlr_keyboard.setKeymap(keymap)) {
+        return error.SetKeymapFailed;
+    }
+
     wlr_keyboard.setRepeatInfo(
         server.config.keyboard_repeat_rate,
         server.config.keyboard_repeat_delay,
     );
 
-    wlr_keyboard.events.modifiers.add(&keyboard.modifiers);
-    wlr_keyboard.events.key.add(&keyboard.key);
+    wlr_keyboard.events.modifiers.add(&self.modifiers);
+    wlr_keyboard.events.key.add(&self.key);
+}
 
-    server.input_manager.seat.wlr_seat.setKeyboard(wlr_keyboard);
-    server.input_manager.all_keyboards.append(keyboard);
+pub fn deinit(self: *hwc.Keyboard) void {
+    self.key.link.remove();
+    self.modifiers.link.remove();
+
+    const seat = server.input_manager.seat;
+    const wlr_keyboard = self.device.wlr_input_device.toKeyboard();
+
+    self.device.deinit();
+
+    // If the currently active keyboard of a seat is destroyed we need to set
+    // a new active keyboard. Otherwise wlroots may send an enter event without
+    // first having sent a keymap event if Seat.keyboardNotifyEnter() is called
+    // before a new active keyboard is set.
+    if (seat.wlr_seat.getKeyboard() == wlr_keyboard) {
+        var it = server.input_manager.devices.iterator(.forward);
+        while (it.next()) |device| {
+            if (device.wlr_input_device.type == .keyboard) {
+                seat.wlr_seat.setKeyboard(device.wlr_input_device.toKeyboard());
+            }
+        }
+    }
+
+    wlr_keyboard.data = 0;
+    self.* = undefined;
+    util.allocator.destroy(self);
 }
 
 fn handleModifiers(
@@ -62,7 +91,10 @@ fn handleKey(
     event: *wlr.Keyboard.event.Key,
 ) void {
     const keyboard: *hwc.Keyboard = @fieldParentPtr("key", listener);
-    const wlr_keyboard = keyboard.device.toKeyboard();
+
+    var device = &keyboard.device;
+    const wlr_keyboard = device.wlr_input_device.toKeyboard();
+
     var seat = &server.input_manager.seat;
 
     // If the keyboard is in a group, this event will be handled by the group's Keyboard instance.

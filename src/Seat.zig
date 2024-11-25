@@ -157,3 +157,30 @@ pub fn handleKeybind(
 
     return false;
 }
+
+pub fn updateCapabilities(self: *hwc.Seat) void {
+    var capabilities = wl.Seat.Capability{};
+
+    var iterator = server.input_manager.devices.iterator(.forward);
+    while (iterator.next()) |device| {
+        switch (device.wlr_input_device.type) {
+            .keyboard => capabilities.keyboard = true,
+            .pointer => capabilities.pointer = true,
+            .touch, .tablet, .@"switch", .tablet_pad => unreachable,
+        }
+    }
+
+    self.wlr_seat.setCapabilities(capabilities);
+}
+
+pub fn keyboardNotifyEnter(self: *hwc.Seat, wlr_surface: *wlr.Surface) void {
+    if (self.wlr_seat.getKeyboard()) |wlr_keyboard| {
+        self.wlr_seat.keyboardNotifyEnter(
+            wlr_surface,
+            wlr_keyboard.keycodes[0..wlr_keyboard.num_keycodes],
+            &wlr_keyboard.modifiers,
+        );
+    } else {
+        self.wlr_seat.keyboardNotifyEnter(wlr_surface, &.{}, null);
+    }
+}
