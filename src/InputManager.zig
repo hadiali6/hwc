@@ -49,7 +49,10 @@ fn handleNewInput(
     wlr_input_device: *wlr.InputDevice,
 ) void {
     const input_manager: *hwc.InputManager = @fieldParentPtr("new_input", listener);
-    input_manager.addDevice(wlr_input_device);
+    input_manager.addDevice(wlr_input_device) catch |err| {
+        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        return;
+    };
 }
 
 fn handleNewVirtualKeyboard(
@@ -57,21 +60,19 @@ fn handleNewVirtualKeyboard(
     wlr_virtual_keyboard: *wlr.VirtualKeyboardV1,
 ) void {
     const input_manager: *hwc.InputManager = @fieldParentPtr("new_virtual_keyboard", listener);
-    input_manager.addDevice(&wlr_virtual_keyboard.keyboard.base);
+    input_manager.addDevice(&wlr_virtual_keyboard.keyboard.base) catch |err| {
+        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        return;
+    };
 }
 
-fn addDevice(self: *hwc.InputManager, wlr_input_device: *wlr.InputDevice) void {
+fn addDevice(self: *hwc.InputManager, wlr_input_device: *wlr.InputDevice) !void {
     switch (wlr_input_device.type) {
         .keyboard => {
-            const keyboard = util.allocator.create(hwc.Keyboard) catch |err| {
-                log.err("failed to create keyboard: {}", .{err});
-                return;
-            };
+            const keyboard = try util.allocator.create(hwc.Keyboard);
 
-            keyboard.init(wlr_input_device) catch |err| {
-                log.err("failed to init keyboard: {}", .{err});
-                return;
-            };
+            try keyboard.init(wlr_input_device);
+            errdefer keyboard.deinit();
 
             const seat = &server.input_manager.seat;
             seat.wlr_seat.setKeyboard(keyboard.device.wlr_input_device.toKeyboard());
@@ -80,24 +81,17 @@ fn addDevice(self: *hwc.InputManager, wlr_input_device: *wlr.InputDevice) void {
             }
         },
         .pointer => {
-            const device = util.allocator.create(Device) catch |err| {
-                log.err("failed to create pointer: {}", .{err});
-                return;
-            };
+            const device = try util.allocator.create(Device);
             errdefer {
                 device.deinit();
                 util.allocator.destroy(device);
             }
 
-            device.init(wlr_input_device) catch |err| {
-                log.err("failed to create pointer: {}", .{err});
-                return;
-            };
-
+            try device.init(wlr_input_device);
             self.seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
         },
         .touch, .tablet, .tablet_pad, .@"switch" => |device_type| {
-            log.err("detected unsopported device: {s}", .{@tagName(device_type)});
+            log.warn("detected unsopported device: {s}", .{@tagName(device_type)});
         },
     }
 }
