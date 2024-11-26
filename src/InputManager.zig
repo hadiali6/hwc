@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const log = std.log.scoped(.input_manager);
 
 const wayland = @import("wayland");
@@ -15,6 +16,7 @@ seat: hwc.Seat,
 devices: wl.list.Head(Device, .link),
 
 virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
+virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
 
 new_input: wl.Listener(*wlr.InputDevice) =
     wl.Listener(*wlr.InputDevice).init(handleNewInput),
@@ -22,11 +24,15 @@ new_input: wl.Listener(*wlr.InputDevice) =
 new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) =
     wl.Listener(*wlr.VirtualKeyboardV1).init(handleNewVirtualKeyboard),
 
+new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) =
+    wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer).init(handleNewVirtualPointer),
+
 pub fn init(self: *hwc.InputManager) !void {
     self.* = .{
         .seat = undefined,
         .devices = undefined,
         .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(server.wl_server),
+        .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(server.wl_server),
     };
 
     try self.seat.init();
@@ -34,11 +40,13 @@ pub fn init(self: *hwc.InputManager) !void {
 
     server.backend.events.new_input.add(&self.new_input);
     self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
+    self.virtual_pointer_manager.events.new_virtual_pointer.add(&self.new_virtual_pointer);
 }
 
 pub fn deinit(self: *hwc.InputManager) void {
     self.new_input.link.remove();
     self.new_virtual_keyboard.link.remove();
+    self.new_virtual_pointer.link.remove();
 
     std.debug.assert(self.devices.empty());
     self.seat.deinit();
@@ -61,6 +69,28 @@ fn handleNewVirtualKeyboard(
 ) void {
     const input_manager: *hwc.InputManager = @fieldParentPtr("new_virtual_keyboard", listener);
     input_manager.addDevice(&wlr_virtual_keyboard.keyboard.base) catch |err| {
+        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        return;
+    };
+}
+
+fn handleNewVirtualPointer(
+    listener: *wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer),
+    event: *wlr.VirtualPointerManagerV1.event.NewPointer,
+) void {
+    const input_manager: *hwc.InputManager = @fieldParentPtr("new_virtual_pointer", listener);
+
+    if (event.suggested_seat) |wlr_seat| {
+        log.debug("{s} suggested_seat: {*}", .{ @src().fn_name, wlr_seat });
+        log.info("ignoring seat suggestion from virtual pointer", .{});
+    }
+
+    if (event.suggested_output) |wlr_output| {
+        log.debug("{s} suggested_output: {*}", .{ @src().fn_name, wlr_output });
+        log.info("ignoring output suggestion from virtual pointer", .{});
+    }
+
+    input_manager.addDevice(&event.new_pointer.pointer.base) catch |err| {
         log.err("{s} failed: {}", .{ @src().fn_name, err });
         return;
     };
