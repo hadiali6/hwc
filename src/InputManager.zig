@@ -15,6 +15,7 @@ var server = &@import("root").server;
 seat: hwc.Seat,
 devices: wl.list.Head(Device, .link),
 
+relative_pointer_manager: *wlr.RelativePointerManagerV1,
 virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
 virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
 
@@ -31,6 +32,7 @@ pub fn init(self: *hwc.InputManager) !void {
     self.* = .{
         .seat = undefined,
         .devices = undefined,
+        .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(server.wl_server),
         .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(server.wl_server),
         .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(server.wl_server),
     };

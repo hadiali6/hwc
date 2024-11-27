@@ -98,7 +98,13 @@ fn handleMotion(
 ) void {
     const cursor: *hwc.Cursor = @fieldParentPtr("motion", listener);
     cursor.wlr_cursor.move(event.device, event.delta_x, event.delta_y);
-    cursor.processCursorMotion(event.time_msec);
+    cursor.processMotion(
+        event.time_msec,
+        event.delta_x,
+        event.delta_y,
+        event.unaccel_dx,
+        event.unaccel_dy,
+    );
 }
 
 fn handleMotionAbsolute(
@@ -107,10 +113,40 @@ fn handleMotionAbsolute(
 ) void {
     const cursor: *hwc.Cursor = @fieldParentPtr("motion_absolute", listener);
     cursor.wlr_cursor.warpAbsolute(event.device, event.x, event.y);
-    cursor.processCursorMotion(event.time_msec);
+
+    var lx: f64 = undefined;
+    var ly: f64 = undefined;
+    cursor.wlr_cursor.absoluteToLayoutCoords(
+        event.device,
+        event.x,
+        event.y,
+        &lx,
+        &ly,
+    );
+
+    const dx = lx - cursor.wlr_cursor.x;
+    const dy = ly - cursor.wlr_cursor.y;
+
+    cursor.processMotion(event.time_msec, dx, dy, dx, dy);
 }
 
-fn processCursorMotion(self: *hwc.Cursor, time_msec: u32) void {
+fn processMotion(
+    self: *hwc.Cursor,
+    time_msec: u32,
+    delta_x: f64,
+    delta_y: f64,
+    unaccel_dx: f64,
+    unaccel_dy: f64,
+) void {
+    server.input_manager.relative_pointer_manager.sendRelativeMotion(
+        server.input_manager.seat.wlr_seat,
+        @as(u64, time_msec) * 1000,
+        delta_x,
+        delta_y,
+        unaccel_dx,
+        unaccel_dy,
+    );
+
     switch (self.mode) {
         .passthrough => self.passthrough(time_msec),
         .move => self.move(),
