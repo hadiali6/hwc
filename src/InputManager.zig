@@ -18,6 +18,7 @@ devices: wl.list.Head(Device, .link),
 relative_pointer_manager: *wlr.RelativePointerManagerV1,
 virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
 virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
+pointer_gestures: *wlr.PointerGesturesV1,
 
 new_input: wl.Listener(*wlr.InputDevice) =
     wl.Listener(*wlr.InputDevice).init(handleNewInput),
@@ -35,6 +36,7 @@ pub fn init(self: *hwc.InputManager) !void {
         .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(server.wl_server),
         .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(server.wl_server),
         .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(server.wl_server),
+        .pointer_gestures = try wlr.PointerGesturesV1.create(server.wl_server),
     };
 
     try self.seat.init();

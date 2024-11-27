@@ -32,6 +32,25 @@ motion: wl.Listener(*wlr.Pointer.event.Motion) =
 motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) =
     wl.Listener(*wlr.Pointer.event.MotionAbsolute).init(handleMotionAbsolute),
 
+pinch_begin: wl.Listener(*wlr.Pointer.event.PinchBegin) =
+    wl.Listener(*wlr.Pointer.event.PinchBegin).init(handlePinchBegin),
+pinch_update: wl.Listener(*wlr.Pointer.event.PinchUpdate) =
+    wl.Listener(*wlr.Pointer.event.PinchUpdate).init(handlePinchUpdate),
+pinch_end: wl.Listener(*wlr.Pointer.event.PinchEnd) =
+    wl.Listener(*wlr.Pointer.event.PinchEnd).init(handlePinchEnd),
+
+swipe_begin: wl.Listener(*wlr.Pointer.event.SwipeBegin) =
+    wl.Listener(*wlr.Pointer.event.SwipeBegin).init(handleSwipeBegin),
+swipe_update: wl.Listener(*wlr.Pointer.event.SwipeUpdate) =
+    wl.Listener(*wlr.Pointer.event.SwipeUpdate).init(handleSwipeUpdate),
+swipe_end: wl.Listener(*wlr.Pointer.event.SwipeEnd) =
+    wl.Listener(*wlr.Pointer.event.SwipeEnd).init(handleSwipeEnd),
+
+hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) =
+    wl.Listener(*wlr.Pointer.event.HoldBegin).init(handleHoldBegin),
+hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) =
+    wl.Listener(*wlr.Pointer.event.HoldEnd).init(handleHoldEnd),
+
 pub fn init(self: *hwc.Cursor) !void {
     self.* = .{
         .wlr_cursor = try wlr.Cursor.create(),
@@ -46,9 +65,37 @@ pub fn init(self: *hwc.Cursor) !void {
     self.wlr_cursor.events.frame.add(&self.frame);
     self.wlr_cursor.events.motion.add(&self.motion);
     self.wlr_cursor.events.motion_absolute.add(&self.motion_absolute);
+
+    self.wlr_cursor.events.pinch_begin.add(&self.pinch_begin);
+    self.wlr_cursor.events.pinch_update.add(&self.pinch_update);
+    self.wlr_cursor.events.pinch_end.add(&self.pinch_end);
+
+    self.wlr_cursor.events.swipe_begin.add(&self.swipe_begin);
+    self.wlr_cursor.events.swipe_update.add(&self.swipe_update);
+    self.wlr_cursor.events.swipe_end.add(&self.swipe_end);
+
+    self.wlr_cursor.events.hold_begin.add(&self.hold_begin);
+    self.wlr_cursor.events.hold_end.add(&self.hold_end);
 }
 
 pub fn deinit(self: *hwc.Cursor) void {
+    self.axis.link.remove();
+    self.button.link.remove();
+    self.frame.link.remove();
+    self.motion.link.remove();
+    self.motion_absolute.link.remove();
+
+    self.pinch_begin.link.remove();
+    self.pinch_update.link.remove();
+    self.pinch_end.link.remove();
+
+    self.swipe_begin.link.remove();
+    self.swipe_update.link.remove();
+    self.swipe_end.link.remove();
+
+    self.hold_begin.link.remove();
+    self.hold_end.link.remove();
+
     self.wlr_cursor.destroy();
 }
 
@@ -241,4 +288,96 @@ fn resize(self: *hwc.Cursor) void {
     const new_width = new_right - new_left;
     const new_height = new_bottom - new_top;
     _ = toplevel.xdg_toplevel.setSize(new_width, new_height);
+}
+
+fn handlePinchBegin(
+    _: *wl.Listener(*wlr.Pointer.event.PinchBegin),
+    event: *wlr.Pointer.event.PinchBegin,
+) void {
+    server.input_manager.pointer_gestures.sendPinchBegin(
+        server.input_manager.seat.wlr_seat,
+        event.time_msec,
+        event.fingers,
+    );
+}
+
+fn handlePinchUpdate(
+    _: *wl.Listener(*wlr.Pointer.event.PinchUpdate),
+    event: *wlr.Pointer.event.PinchUpdate,
+) void {
+    server.input_manager.pointer_gestures.sendPinchUpdate(
+        server.input_manager.seat.wlr_seat,
+        event.time_msec,
+        event.dx,
+        event.dy,
+        event.scale,
+        event.rotation,
+    );
+}
+
+fn handlePinchEnd(
+    _: *wl.Listener(*wlr.Pointer.event.PinchEnd),
+    event: *wlr.Pointer.event.PinchEnd,
+) void {
+    server.input_manager.pointer_gestures.sendPinchEnd(
+        server.input_manager.seat.wlr_seat,
+        event.time_msec,
+        event.cancelled,
+    );
+}
+
+fn handleSwipeBegin(
+    _: *wl.Listener(*wlr.Pointer.event.SwipeBegin),
+    event: *wlr.Pointer.event.SwipeBegin,
+) void {
+    server.input_manager.pointer_gestures.sendSwipeBegin(
+        server.input_manager.seat.wlr_seat,
+        event.time_msec,
+        event.fingers,
+    );
+}
+
+fn handleSwipeUpdate(
+    _: *wl.Listener(*wlr.Pointer.event.SwipeUpdate),
+    event: *wlr.Pointer.event.SwipeUpdate,
+) void {
+    server.input_manager.pointer_gestures.sendSwipeUpdate(
+        server.input_manager.seat.wlr_seat,
+        event.time_msec,
+        event.dx,
+        event.dy,
+    );
+}
+
+fn handleSwipeEnd(
+    _: *wl.Listener(*wlr.Pointer.event.SwipeEnd),
+    event: *wlr.Pointer.event.SwipeEnd,
+) void {
+    server.input_manager.pointer_gestures.sendPinchEnd(
+        server.input_manager.seat.wlr_seat,
+        event.time_msec,
+        event.cancelled,
+    );
+}
+
+fn handleHoldBegin(
+    _: *wl.Listener(*wlr.Pointer.event.HoldBegin),
+    event: *wlr.Pointer.event.HoldBegin,
+) void {
+    server.input_manager.pointer_gestures.sendHoldBegin(
+        server.input_manager.seat.wlr_seat,
+        event.time_msec,
+        event.fingers,
+    );
+}
+
+fn handleHoldEnd(
+    _: *wl.Listener(*wlr.Pointer.event.HoldEnd),
+    event: *wlr.Pointer.event.HoldEnd,
+) void {
+    server.input_manager.pointer_gestures.sendHoldEnd(
+        server.input_manager.seat.wlr_seat,
+        event.time_msec,
+        event.cancelled,
+    );
 }
