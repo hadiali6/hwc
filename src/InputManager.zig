@@ -24,13 +24,10 @@ pointer_constraints: *wlr.PointerConstraintsV1,
 
 new_input: wl.Listener(*wlr.InputDevice) =
     wl.Listener(*wlr.InputDevice).init(handleNewInput),
-
 new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) =
     wl.Listener(*wlr.VirtualKeyboardV1).init(handleNewVirtualKeyboard),
-
 new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) =
     wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer).init(handleNewVirtualPointer),
-
 new_constraint: wl.Listener(*wlr.PointerConstraintV1) =
     wl.Listener(*wlr.PointerConstraintV1).init(handleNewConstraint),
 
@@ -58,6 +55,7 @@ pub fn deinit(self: *hwc.InputManager) void {
     self.new_input.link.remove();
     self.new_virtual_keyboard.link.remove();
     self.new_virtual_pointer.link.remove();
+    self.new_constraint.link.remove();
 
     assert(self.devices.empty());
     self.seat.deinit();
