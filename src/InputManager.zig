@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const log = std.log.scoped(.input_manager);
+const assert = std.debug.assert;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
@@ -19,6 +20,7 @@ relative_pointer_manager: *wlr.RelativePointerManagerV1,
 virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
 virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
 pointer_gestures: *wlr.PointerGesturesV1,
+pointer_constraints: *wlr.PointerConstraintsV1,
 
 new_input: wl.Listener(*wlr.InputDevice) =
     wl.Listener(*wlr.InputDevice).init(handleNewInput),
@@ -29,6 +31,9 @@ new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) =
 new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) =
     wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer).init(handleNewVirtualPointer),
 
+new_constraint: wl.Listener(*wlr.PointerConstraintV1) =
+    wl.Listener(*wlr.PointerConstraintV1).init(handleNewConstraint),
+
 pub fn init(self: *hwc.InputManager) !void {
     self.* = .{
         .seat = undefined,
@@ -37,6 +42,7 @@ pub fn init(self: *hwc.InputManager) !void {
         .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(server.wl_server),
         .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(server.wl_server),
         .pointer_gestures = try wlr.PointerGesturesV1.create(server.wl_server),
+        .pointer_constraints = try wlr.PointerConstraintsV1.create(server.wl_server),
     };
 
     try self.seat.init();
@@ -45,6 +51,7 @@ pub fn init(self: *hwc.InputManager) !void {
     server.backend.events.new_input.add(&self.new_input);
     self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
     self.virtual_pointer_manager.events.new_virtual_pointer.add(&self.new_virtual_pointer);
+    self.pointer_constraints.events.new_constraint.add(&self.new_constraint);
 }
 
 pub fn deinit(self: *hwc.InputManager) void {
@@ -52,7 +59,7 @@ pub fn deinit(self: *hwc.InputManager) void {
     self.new_virtual_keyboard.link.remove();
     self.new_virtual_pointer.link.remove();
 
-    std.debug.assert(self.devices.empty());
+    assert(self.devices.empty());
     self.seat.deinit();
 }
 
@@ -97,6 +104,15 @@ fn handleNewVirtualPointer(
     input_manager.addDevice(&event.new_pointer.pointer.base) catch |err| {
         log.err("{s} failed: {}", .{ @src().fn_name, err });
         return;
+    };
+}
+
+fn handleNewConstraint(
+    _: *wl.Listener(*wlr.PointerConstraintV1),
+    wlr_pointer_constraint: *wlr.PointerConstraintV1,
+) void {
+    hwc.PointerConstraint.create(wlr_pointer_constraint) catch {
+        wlr_pointer_constraint.resource.postNoMemory();
     };
 }
 

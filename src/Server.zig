@@ -145,6 +145,7 @@ pub fn start(self: *hwc.Server) !void {
 const ToplevelAtResult = struct {
     toplevel: *hwc.XdgToplevel,
     surface: *wlr.Surface,
+    node: *wlr.SceneNode,
     sx: f64,
     sy: f64,
 };
@@ -163,6 +164,7 @@ pub fn toplevelAt(self: *hwc.Server, lx: f64, ly: f64) ?ToplevelAtResult {
                 return ToplevelAtResult{
                     .toplevel = toplevel,
                     .surface = scene_surface.surface,
+                    .node = node,
                     .sx = sx,
                     .sy = sy,
                 };

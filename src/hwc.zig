@@ -11,3 +11,4 @@ pub const Config = @import("Config.zig");
 
 pub const InputManager = @import("InputManager.zig");
 pub const Seat = @import("Seat.zig");
+pub const PointerConstraint = @import("PointerConstraint.zig");

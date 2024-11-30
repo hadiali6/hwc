@@ -14,6 +14,11 @@ const Mode = enum { passthrough, move, resize };
 wlr_cursor: *wlr.Cursor,
 xcursor_manager: *wlr.XcursorManager,
 
+/// The pointer constraint for the surface that currently has keyboard focus, if any.
+/// This constraint is not necessarily active, activation only occurs once the cursor
+/// has been moved inside the constraint region.
+constraint: ?*hwc.PointerConstraint = null,
+
 mode: Mode = .passthrough,
 grabbed_toplevel: ?*hwc.XdgToplevel = null,
 grab_x: f64 = 0,
@@ -144,8 +149,8 @@ fn handleMotion(
     event: *wlr.Pointer.event.Motion,
 ) void {
     const cursor: *hwc.Cursor = @fieldParentPtr("motion", listener);
-    cursor.wlr_cursor.move(event.device, event.delta_x, event.delta_y);
     cursor.processMotion(
+        event.device,
         event.time_msec,
         event.delta_x,
         event.delta_y,
@@ -174,11 +179,12 @@ fn handleMotionAbsolute(
     const dx = lx - cursor.wlr_cursor.x;
     const dy = ly - cursor.wlr_cursor.y;
 
-    cursor.processMotion(event.time_msec, dx, dy, dx, dy);
+    cursor.processMotion(event.device, event.time_msec, dx, dy, dx, dy);
 }
 
 fn processMotion(
     self: *hwc.Cursor,
+    wlr_input_device: *wlr.InputDevice,
     time_msec: u32,
     delta_x: f64,
     delta_y: f64,
@@ -194,8 +200,26 @@ fn processMotion(
         unaccel_dy,
     );
 
+    var dx: f64 = delta_x;
+    var dy: f64 = delta_y;
+
+    if (self.constraint) |constraint| {
+        if (constraint.state == .active) {
+            switch (constraint.wlr_pointer_constraint.type) {
+                .locked => return,
+                .confined => constraint.confine(&dx, &dy),
+            }
+        }
+    }
+
     switch (self.mode) {
-        .passthrough => self.passthrough(time_msec),
+        .passthrough => {
+            self.wlr_cursor.move(wlr_input_device, dx, dy);
+            self.passthrough(time_msec);
+            if (self.constraint) |constraint| {
+                constraint.maybeActivate();
+            }
+        },
         .move => self.move(),
         .resize => self.resize(),
     }
