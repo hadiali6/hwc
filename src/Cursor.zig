@@ -149,8 +149,31 @@ fn handleMotion(
     event: *wlr.Pointer.event.Motion,
 ) void {
     const cursor: *hwc.Cursor = @fieldParentPtr("motion", listener);
+
+    var dx: f64 = event.delta_x;
+    var dy: f64 = event.delta_y;
+
+    if (cursor.constraint) |constraint| {
+        if (constraint.state == .active) {
+            switch (constraint.wlr_pointer_constraint.type) {
+                .locked => {
+                    sendRelativeMotion(
+                        event.time_msec,
+                        event.delta_x,
+                        event.delta_y,
+                        event.unaccel_dx,
+                        event.unaccel_dy,
+                    );
+                    return;
+                },
+                .confined => constraint.confine(&dx, &dy),
+            }
+        }
+    }
+
+    cursor.wlr_cursor.move(event.device, dx, dy);
+
     cursor.processMotion(
-        event.device,
         event.time_msec,
         event.delta_x,
         event.delta_y,
@@ -179,42 +202,38 @@ fn handleMotionAbsolute(
     const dx = lx - cursor.wlr_cursor.x;
     const dy = ly - cursor.wlr_cursor.y;
 
-    cursor.processMotion(event.device, event.time_msec, dx, dy, dx, dy);
+    cursor.processMotion(event.time_msec, dx, dy, dx, dy);
 }
 
-fn processMotion(
-    self: *hwc.Cursor,
-    wlr_input_device: *wlr.InputDevice,
+fn sendRelativeMotion(
     time_msec: u32,
-    delta_x: f64,
-    delta_y: f64,
+    dx: f64,
+    dy: f64,
     unaccel_dx: f64,
     unaccel_dy: f64,
 ) void {
     server.input_manager.relative_pointer_manager.sendRelativeMotion(
         server.input_manager.seat.wlr_seat,
         @as(u64, time_msec) * 1000,
-        delta_x,
-        delta_y,
+        dx,
+        dy,
         unaccel_dx,
         unaccel_dy,
     );
+}
 
-    var dx: f64 = delta_x;
-    var dy: f64 = delta_y;
-
-    if (self.constraint) |constraint| {
-        if (constraint.state == .active) {
-            switch (constraint.wlr_pointer_constraint.type) {
-                .locked => return,
-                .confined => constraint.confine(&dx, &dy),
-            }
-        }
-    }
+fn processMotion(
+    self: *hwc.Cursor,
+    time_msec: u32,
+    delta_x: f64,
+    delta_y: f64,
+    unaccel_dx: f64,
+    unaccel_dy: f64,
+) void {
+    sendRelativeMotion(time_msec, delta_x, delta_y, unaccel_dx, unaccel_dy);
 
     switch (self.mode) {
         .passthrough => {
-            self.wlr_cursor.move(wlr_input_device, dx, dy);
             self.passthrough(time_msec);
             if (self.constraint) |constraint| {
                 constraint.maybeActivate();
