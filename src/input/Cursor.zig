@@ -5,7 +5,7 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const hwc = @import("hwc.zig");
+const hwc = @import("../hwc.zig");
 
 const server = &@import("root").server;
 
@@ -17,7 +17,7 @@ xcursor_manager: *wlr.XcursorManager,
 /// The pointer constraint for the surface that currently has keyboard focus, if any.
 /// This constraint is not necessarily active, activation only occurs once the cursor
 /// has been moved inside the constraint region.
-constraint: ?*hwc.PointerConstraint = null,
+constraint: ?*hwc.input.PointerConstraint = null,
 
 mode: Mode = .passthrough,
 grabbed_toplevel: ?*hwc.XdgToplevel = null,
@@ -56,7 +56,7 @@ hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) =
 hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) =
     wl.Listener(*wlr.Pointer.event.HoldEnd).init(handleHoldEnd),
 
-pub fn init(self: *hwc.Cursor) !void {
+pub fn init(self: *hwc.input.Cursor) !void {
     self.* = .{
         .wlr_cursor = try wlr.Cursor.create(),
         .xcursor_manager = try wlr.XcursorManager.create(null, 24),
@@ -83,7 +83,7 @@ pub fn init(self: *hwc.Cursor) !void {
     self.wlr_cursor.events.hold_end.add(&self.hold_end);
 }
 
-pub fn deinit(self: *hwc.Cursor) void {
+pub fn deinit(self: *hwc.input.Cursor) void {
     self.axis.link.remove();
     self.button.link.remove();
     self.frame.link.remove();
@@ -122,7 +122,7 @@ fn handleButton(
     listener: *wl.Listener(*wlr.Pointer.event.Button),
     event: *wlr.Pointer.event.Button,
 ) void {
-    const cursor: *hwc.Cursor = @fieldParentPtr("button", listener);
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("button", listener);
 
     _ = server.input_manager.seat.wlr_seat.pointerNotifyButton(
         event.time_msec,
@@ -148,7 +148,7 @@ fn handleMotion(
     listener: *wl.Listener(*wlr.Pointer.event.Motion),
     event: *wlr.Pointer.event.Motion,
 ) void {
-    const cursor: *hwc.Cursor = @fieldParentPtr("motion", listener);
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("motion", listener);
 
     var dx: f64 = event.delta_x;
     var dy: f64 = event.delta_y;
@@ -186,7 +186,7 @@ fn handleMotionAbsolute(
     listener: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
     event: *wlr.Pointer.event.MotionAbsolute,
 ) void {
-    const cursor: *hwc.Cursor = @fieldParentPtr("motion_absolute", listener);
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("motion_absolute", listener);
     cursor.wlr_cursor.warpAbsolute(event.device, event.x, event.y);
 
     var lx: f64 = undefined;
@@ -223,7 +223,7 @@ fn sendRelativeMotion(
 }
 
 fn processMotion(
-    self: *hwc.Cursor,
+    self: *hwc.input.Cursor,
     time_msec: u32,
     delta_x: f64,
     delta_y: f64,
@@ -244,7 +244,7 @@ fn processMotion(
     }
 }
 
-fn passthrough(self: *hwc.Cursor, time_msec: u32) void {
+fn passthrough(self: *hwc.input.Cursor, time_msec: u32) void {
     const wlr_seat = server.input_manager.seat.wlr_seat;
 
     if (server.toplevelAt(self.wlr_cursor.x, self.wlr_cursor.y)) |result| {
@@ -256,7 +256,7 @@ fn passthrough(self: *hwc.Cursor, time_msec: u32) void {
     }
 }
 
-fn move(self: *hwc.Cursor) void {
+fn move(self: *hwc.input.Cursor) void {
     const toplevel: *hwc.XdgToplevel = self.grabbed_toplevel orelse blk: {
         const toplevel_result_at_cursor = server.toplevelAt(
             self.wlr_cursor.x,
@@ -280,7 +280,7 @@ fn move(self: *hwc.Cursor) void {
     );
 }
 
-fn resize(self: *hwc.Cursor) void {
+fn resize(self: *hwc.input.Cursor) void {
     const toplevel: *hwc.XdgToplevel = self.grabbed_toplevel orelse blk: {
         const toplevel_result_at_cursor = server.toplevelAt(
             self.wlr_cursor.x,

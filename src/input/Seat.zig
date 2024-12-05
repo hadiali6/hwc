@@ -6,29 +6,29 @@ const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
-const hwc = @import("hwc.zig");
-const util = @import("util.zig");
+const hwc = @import("../hwc.zig");
+const util = @import("../util.zig");
 
-var server = &@import("root").server;
+const server = &@import("root").server;
 
 wlr_seat: *wlr.Seat,
-cursor: hwc.Cursor,
+cursor: hwc.input.Cursor,
 
 /// Timer for repeating keyboard mappings
 keybind_repeat_timer: *wl.EventSource,
 
 /// Currently repeating mapping, if any
-repeating_keybind: ?*const hwc.Keybind = null,
+repeating_keybind: ?*const hwc.input.Keybind = null,
 
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) =
     wl.Listener(*wlr.Seat.event.RequestSetCursor).init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) =
     wl.Listener(*wlr.Seat.event.RequestSetSelection).init(handleRequestSetSelection),
 
-pub fn init(self: *hwc.Seat) !void {
+pub fn init(self: *hwc.input.Seat) !void {
     const event_loop = server.wl_server.getEventLoop();
     const keybind_repeat_timer = try event_loop.addTimer(
-        *hwc.Seat,
+        *hwc.input.Seat,
         handleMappingRepeatTimeout,
         self,
     );
@@ -48,7 +48,7 @@ pub fn init(self: *hwc.Seat) !void {
     self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);
 }
 
-pub fn deinit(self: *hwc.Seat) void {
+pub fn deinit(self: *hwc.input.Seat) void {
     self.keybind_repeat_timer.remove();
     self.cursor.deinit();
 }
@@ -57,7 +57,7 @@ fn handleRequestSetCursor(
     listener: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
     event: *wlr.Seat.event.RequestSetCursor,
 ) void {
-    const seat: *hwc.Seat = @fieldParentPtr("request_set_cursor", listener);
+    const seat: *hwc.input.Seat = @fieldParentPtr("request_set_cursor", listener);
     if (event.seat_client == seat.wlr_seat.pointer_state.focused_client) {
         seat.cursor.wlr_cursor.setSurface(
             event.surface,
@@ -71,11 +71,11 @@ fn handleRequestSetSelection(
     listener: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
     event: *wlr.Seat.event.RequestSetSelection,
 ) void {
-    const seat: *hwc.Seat = @fieldParentPtr("request_set_selection", listener);
+    const seat: *hwc.input.Seat = @fieldParentPtr("request_set_selection", listener);
     seat.wlr_seat.setSelection(event.source, event.serial);
 }
 
-fn handleMappingRepeatTimeout(self: *hwc.Seat) c_int {
+fn handleMappingRepeatTimeout(self: *hwc.input.Seat) c_int {
     if (self.repeating_keybind) |keybind| {
         const rate = server.config.keyboard_repeat_rate;
         const ms_delay = if (rate > 0) 1000 / rate else 0;
@@ -89,7 +89,7 @@ fn handleMappingRepeatTimeout(self: *hwc.Seat) c_int {
     return 0;
 }
 
-pub fn clearRepeatingMapping(self: *hwc.Seat) void {
+pub fn clearRepeatingMapping(self: *hwc.input.Seat) void {
     self.keybind_repeat_timer.timerUpdate(0) catch {
         log.err("failed to clear mapping repeat timer", .{});
     };
@@ -99,7 +99,7 @@ pub fn clearRepeatingMapping(self: *hwc.Seat) void {
 /// Handle any user-defined mapping for passed keycode, modifiers and keyboard state
 /// Returns true if a mapping was run
 pub fn handleKeybind(
-    self: *hwc.Seat,
+    self: *hwc.input.Seat,
     keycode: xkb.Keycode,
     modifiers: wlr.Keyboard.ModifierMask,
     released: bool,
@@ -112,7 +112,7 @@ pub fn handleKeybind(
     // modifier and confict with a mapping for Super+Space. For this reason,
     // matching wihout xkbcommon translation is done first and after a match
     // has been found all further matches are ignored.
-    var found: ?*hwc.Keybind = null;
+    var found: ?*hwc.input.Keybind = null;
 
     // First check for matches without translating keysyms with xkbcommon.
     // That is, if the physical keys Mod+Shift+1 are pressed on a US layout don't
@@ -158,7 +158,7 @@ pub fn handleKeybind(
     return false;
 }
 
-pub fn updateCapabilities(self: *hwc.Seat) void {
+pub fn updateCapabilities(self: *hwc.input.Seat) void {
     var capabilities = wl.Seat.Capability{};
 
     var iterator = server.input_manager.devices.iterator(.forward);
@@ -173,7 +173,7 @@ pub fn updateCapabilities(self: *hwc.Seat) void {
     self.wlr_seat.setCapabilities(capabilities);
 }
 
-pub fn keyboardNotifyEnter(self: *hwc.Seat, wlr_surface: *wlr.Surface) void {
+pub fn keyboardNotifyEnter(self: *hwc.input.Seat, wlr_surface: *wlr.Surface) void {
     if (self.wlr_seat.getKeyboard()) |wlr_keyboard| {
         self.wlr_seat.keyboardNotifyEnter(
             wlr_surface,

@@ -41,7 +41,7 @@ new_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) =
 
 config: hwc.Config,
 output_manager: hwc.OutputManager,
-input_manager: hwc.InputManager,
+input_manager: hwc.input.Manager,
 
 security_context_manager: *wlr.SecurityContextManagerV1,
 single_pixel_buffer_manager: *wlr.SinglePixelBufferManagerV1,

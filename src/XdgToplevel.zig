@@ -124,7 +124,7 @@ fn handleMove(
     _: *wlr.XdgToplevel.event.Move,
 ) void {
     const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_move", listener);
-    var cursor: *hwc.Cursor = &server.input_manager.seat.cursor;
+    var cursor = &server.input_manager.seat.cursor;
 
     cursor.grabbed_toplevel = toplevel;
     cursor.mode = .move;
@@ -137,7 +137,7 @@ fn handleResize(
     event: *wlr.XdgToplevel.event.Resize,
 ) void {
     const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_resize", listener);
-    var cursor: *hwc.Cursor = &server.input_manager.seat.cursor;
+    var cursor = &server.input_manager.seat.cursor;
 
     cursor.grabbed_toplevel = toplevel;
     cursor.mode = .resize;

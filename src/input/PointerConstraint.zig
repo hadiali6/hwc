@@ -6,8 +6,8 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const hwc = @import("hwc.zig");
-const util = @import("util.zig");
+const hwc = @import("../hwc.zig");
+const util = @import("../util.zig");
 
 const server = &@import("root").server;
 
@@ -32,9 +32,9 @@ destroy: wl.Listener(*wlr.PointerConstraintV1) =
 node_destroy: wl.Listener(void) = wl.Listener(void).init(handleNodeDestroy),
 
 pub fn create(wlr_pointer_constraint: *wlr.PointerConstraintV1) !void {
-    const seat: *hwc.Seat = @ptrFromInt(wlr_pointer_constraint.seat.data);
+    const seat: *hwc.input.Seat = @ptrFromInt(wlr_pointer_constraint.seat.data);
 
-    const constraint = try util.allocator.create(hwc.PointerConstraint);
+    const constraint = try util.allocator.create(hwc.input.PointerConstraint);
     errdefer util.allocator.destroy(constraint);
 
     constraint.* = .{
@@ -56,8 +56,8 @@ pub fn create(wlr_pointer_constraint: *wlr.PointerConstraintV1) !void {
     }
 }
 
-pub fn maybeActivate(self: *hwc.PointerConstraint) void {
-    const seat: *hwc.Seat = @ptrFromInt(self.wlr_pointer_constraint.seat.data);
+pub fn maybeActivate(self: *hwc.input.PointerConstraint) void {
+    const seat: *hwc.input.Seat = @ptrFromInt(self.wlr_pointer_constraint.seat.data);
 
     assert(seat.cursor.constraint == self);
 
@@ -99,7 +99,7 @@ pub fn maybeActivate(self: *hwc.PointerConstraint) void {
     self.wlr_pointer_constraint.sendActivated();
 }
 
-pub fn confine(self: *hwc.PointerConstraint, dx: *f64, dy: *f64) void {
+pub fn confine(self: *hwc.input.PointerConstraint, dx: *f64, dy: *f64) void {
     assert(self.state == .active);
     assert(self.wlr_pointer_constraint.type == .confined);
 
@@ -118,8 +118,8 @@ pub fn confine(self: *hwc.PointerConstraint, dx: *f64, dy: *f64) void {
     self.state.active.sy = new_sy;
 }
 
-pub fn deactivate(self: *hwc.PointerConstraint) void {
-    const seat: *hwc.Seat = @ptrFromInt(self.wlr_pointer_constraint.seat.data);
+pub fn deactivate(self: *hwc.input.PointerConstraint) void {
+    const seat: *hwc.input.Seat = @ptrFromInt(self.wlr_pointer_constraint.seat.data);
 
     assert(seat.cursor.constraint == self);
     assert(self.state == .active);
@@ -133,8 +133,8 @@ pub fn deactivate(self: *hwc.PointerConstraint) void {
     self.wlr_pointer_constraint.sendDeactivated();
 }
 
-pub fn warpToHint(self: *hwc.PointerConstraint) void {
-    const seat: *hwc.Seat = @ptrFromInt(self.wlr_pointer_constraint.seat.data);
+pub fn warpToHint(self: *hwc.input.PointerConstraint) void {
+    const seat: *hwc.input.Seat = @ptrFromInt(self.wlr_pointer_constraint.seat.data);
 
     var lx: i32 = undefined;
     var ly: i32 = undefined;
@@ -159,8 +159,8 @@ fn handleCommit(
     listener: *wl.Listener(*wlr.Surface),
     _: *wlr.Surface,
 ) void {
-    const constraint: *hwc.PointerConstraint = @fieldParentPtr("commit", listener);
-    const seat: *hwc.Seat = @ptrFromInt(constraint.wlr_pointer_constraint.seat.data);
+    const constraint: *hwc.input.PointerConstraint = @fieldParentPtr("commit", listener);
+    const seat: *hwc.input.Seat = @ptrFromInt(constraint.wlr_pointer_constraint.seat.data);
 
     switch (constraint.state) {
         .active => |state| {
@@ -184,8 +184,8 @@ fn handleDestroy(
     listener: *wl.Listener(*wlr.PointerConstraintV1),
     _: *wlr.PointerConstraintV1,
 ) void {
-    const constraint: *hwc.PointerConstraint = @fieldParentPtr("destroy", listener);
-    const seat: *hwc.Seat = @ptrFromInt(constraint.wlr_pointer_constraint.seat.data);
+    const constraint: *hwc.input.PointerConstraint = @fieldParentPtr("destroy", listener);
+    const seat: *hwc.input.Seat = @ptrFromInt(constraint.wlr_pointer_constraint.seat.data);
 
     if (constraint.state == .active) {
         // We can't simply call deactivate() here as it calls sendDeactivated(),
@@ -208,7 +208,7 @@ fn handleDestroy(
 }
 
 fn handleNodeDestroy(listener: *wl.Listener(void)) void {
-    const constraint: *hwc.PointerConstraint = @fieldParentPtr("node_destroy", listener);
+    const constraint: *hwc.input.PointerConstraint = @fieldParentPtr("node_destroy", listener);
 
     log.info("deactivating pointer constraint, scene node destroyed", .{});
 

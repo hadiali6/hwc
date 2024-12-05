@@ -5,22 +5,20 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
-const ziglua = @import("ziglua");
 
-const util = @import("util.zig");
-const hwc = @import("hwc.zig");
-const lua = @import("lua.zig");
+const hwc = @import("../hwc.zig");
+const util = @import("../util.zig");
 
 const server = &@import("root").server;
 
-device: hwc.InputManager.Device,
+device: hwc.input.Device,
 
 modifiers: wl.Listener(*wlr.Keyboard) =
     wl.Listener(*wlr.Keyboard).init(handleModifiers),
 key: wl.Listener(*wlr.Keyboard.event.Key) =
     wl.Listener(*wlr.Keyboard.event.Key).init(handleKey),
 
-pub fn init(self: *hwc.Keyboard, wlr_input_device: *wlr.InputDevice) !void {
+pub fn init(self: *hwc.input.Keyboard, wlr_input_device: *wlr.InputDevice) !void {
     self.* = .{
         .device = undefined,
     };
@@ -50,7 +48,7 @@ pub fn init(self: *hwc.Keyboard, wlr_input_device: *wlr.InputDevice) !void {
     wlr_keyboard.events.key.add(&self.key);
 }
 
-pub fn deinit(self: *hwc.Keyboard) void {
+pub fn deinit(self: *hwc.input.Keyboard) void {
     self.key.link.remove();
     self.modifiers.link.remove();
 
@@ -90,7 +88,7 @@ fn handleKey(
     listener: *wl.Listener(*wlr.Keyboard.event.Key),
     event: *wlr.Keyboard.event.Key,
 ) void {
-    const keyboard: *hwc.Keyboard = @fieldParentPtr("key", listener);
+    const keyboard: *hwc.input.Keyboard = @fieldParentPtr("key", listener);
 
     var device = &keyboard.device;
     const wlr_keyboard = device.wlr_input_device.toKeyboard();

@@ -245,14 +245,14 @@ fn addKeybind(lua: *Lua) i32 {
     {
         const keysym = blk: {
             const key_str = lua.toString(1) catch unreachable;
-            break :blk hwc.Keybind.parseKeysym(key_str) catch {
+            break :blk hwc.input.Keybind.parseKeysym(key_str) catch {
                 lua.raiseErrorStr("unable to parse key", .{});
                 return 0;
             };
         };
         const modifiers = blk: {
             const modifiers_str = lua.toString(2) catch unreachable;
-            break :blk hwc.Keybind.parseModifiers(modifiers_str) catch {
+            break :blk hwc.input.Keybind.parseModifiers(modifiers_str) catch {
                 lua.raiseErrorStr("unable to parse modifiers", .{});
                 return 0;
             };
@@ -261,7 +261,7 @@ fn addKeybind(lua: *Lua) i32 {
         const is_on_release = lua.toBoolean(4);
         const layout_index = lua.toInteger(5) catch null;
 
-        const keybind = hwc.Keybind{
+        const keybind = hwc.input.Keybind{
             .keysym = keysym,
             .modifiers = modifiers,
             .id = @intCast(server.config.keybinds.items.len),
@@ -308,15 +308,15 @@ fn removeKeybind(lua: *Lua) i32 {
     }
 
     var index: u32 = 0;
-    const found_keybind: ?hwc.Keybind = blk: {
+    const found_keybind: ?hwc.input.Keybind = blk: {
         const keysym = inner: {
             const keybind_str = lua.toString(1) catch unreachable;
-            break :inner hwc.Keybind.parseKeysym(keybind_str) catch unreachable;
+            break :inner hwc.input.Keybind.parseKeysym(keybind_str) catch unreachable;
         };
 
         const modifiers = inner: {
             const modifiers_str = lua.toString(2) catch unreachable;
-            break :inner hwc.Keybind.parseModifiers(modifiers_str) catch unreachable;
+            break :inner hwc.input.Keybind.parseModifiers(modifiers_str) catch unreachable;
         };
 
         for (server.config.keybinds.items) |keybind| {
