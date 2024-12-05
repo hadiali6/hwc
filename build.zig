@@ -15,6 +15,8 @@ pub fn build(b: *std.Build) void {
     const scanner = Scanner.create(b, .{});
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
     scanner.addSystemProtocol("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml");
+    scanner.addSystemProtocol("unstable/pointer-gestures/pointer-gestures-unstable-v1.xml");
+    scanner.addSystemProtocol("unstable/pointer-constraints/pointer-constraints-unstable-v1.xml");
 
     scanner.generate("wl_compositor", 4);
     scanner.generate("wl_subcompositor", 1);
@@ -24,6 +26,8 @@ pub fn build(b: *std.Build) void {
     scanner.generate("wl_data_device_manager", 3);
     scanner.generate("xdg_wm_base", 2);
     scanner.generate("zxdg_decoration_manager_v1", 1);
+    scanner.generate("zwp_pointer_gestures_v1", 3);
+    scanner.generate("zwp_pointer_constraints_v1", 1);
 
     const wayland = b.createModule(.{ .root_source_file = scanner.result });
 
@@ -60,6 +64,7 @@ pub fn build(b: *std.Build) void {
     hwc_exe.linkSystemLibrary("wayland-server");
     hwc_exe.linkSystemLibrary("xkbcommon");
     hwc_exe.linkSystemLibrary("pixman-1");
+    hwc_exe.linkSystemLibrary("libinput");
 
     // TODO: remove when https://github.com/ziglang/zig/issues/131 is implemented
     scanner.addCSource(hwc_exe);
