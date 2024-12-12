@@ -83,7 +83,7 @@ fn handleMap(listener: *wl.Listener(void)) void {
     server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
 
     toplevel.xdg_toplevel.base.getGeometry(&toplevel.geometry);
-    const usable_area: wlr.Box = getUsableArea(getActiveOutput(toplevel).?);
+    const usable_area: wlr.Box = getUsableArea(toplevel.getActiveOutput().?);
     if (toplevel.geometry.width > usable_area.width) {
         toplevel.geometry.width = usable_area.width;
     }
@@ -202,7 +202,7 @@ fn requestFullscreen(listener: *wl.Listener(void)) void {
 
     const is_fullscreen: bool = toplevel.xdg_toplevel.current.fullscreen;
     if (!is_fullscreen) {
-        const wlr_output: ?*wlr.Output = getActiveOutput(toplevel);
+        const wlr_output: ?*wlr.Output = toplevel.getActiveOutput();
         var output_box: wlr.Box = undefined;
         server.output_layout.getBox(wlr_output, &output_box);
         toplevel.previous_geometry = toplevel.geometry;
@@ -238,12 +238,15 @@ fn getUsableArea(output: *wlr.Output) wlr.Box {
     return usable_area;
 }
 
-fn getActiveOutput(toplevel: *hwc.XdgToplevel) ?*wlr.Output {
+pub fn getActiveOutput(self: *hwc.XdgToplevel) ?*wlr.Output {
+    const output: ?*wlr.Output = undefined;
+
     var closest_x: f64 = undefined;
     var closest_y: f64 = undefined;
-    const output: ?*wlr.Output = undefined;
+
     var geo: wlr.Box = undefined;
-    toplevel.xdg_toplevel.base.getGeometry(&geo);
+    self.xdg_toplevel.base.getGeometry(&geo);
+
     server.output_layout.closestPoint(
         output,
         @floatFromInt(geo.x + @divTrunc(geo.width, 2)),
@@ -251,5 +254,6 @@ fn getActiveOutput(toplevel: *hwc.XdgToplevel) ?*wlr.Output {
         &closest_x,
         &closest_y,
     );
+
     return server.output_layout.outputAt(closest_x, closest_y);
 }

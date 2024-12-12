@@ -13,6 +13,7 @@ const server = &@import("root").server;
 
 wlr_seat: *wlr.Seat,
 cursor: hwc.input.Cursor,
+relay: hwc.input.Relay,
 
 /// Timer for repeating keyboard mappings
 keybind_repeat_timer: *wl.EventSource,
@@ -38,11 +39,13 @@ pub fn init(self: *hwc.input.Seat) !void {
         .keybind_repeat_timer = keybind_repeat_timer,
         .wlr_seat = try wlr.Seat.create(server.wl_server, "seat0"),
         .cursor = undefined,
+        .relay = undefined,
     };
 
     self.wlr_seat.data = @intFromPtr(self);
 
     try self.cursor.init();
+    self.relay.init();
 
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
     self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);

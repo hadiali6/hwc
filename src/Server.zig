@@ -17,6 +17,7 @@ allocator: *wlr.Allocator,
 compositor: *wlr.Compositor,
 subcompositor: *wlr.Subcompositor,
 scene: *wlr.Scene,
+hidden: *wlr.SceneTree,
 
 renderer_lost: wl.Listener(void) = wl.Listener(void).init(handleRendererLost),
 
@@ -34,6 +35,8 @@ xdg_shell: *wlr.XdgShell,
 new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) =
     wl.Listener(*wlr.XdgToplevel).init(handleNewXdgToplevel),
 mapped_toplevels: wl.list.Head(hwc.XdgToplevel, .link),
+
+focused: ?*hwc.XdgToplevel = null,
 
 xdg_decoration_manager: *wlr.XdgDecorationManagerV1,
 new_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) =
@@ -63,6 +66,8 @@ pub fn init(self: *hwc.Server) !void {
     const renderer = try wlr.Renderer.autocreate(backend);
     const output_layout = try wlr.OutputLayout.create(wl_server);
     const scene = try wlr.Scene.create();
+    const hidden_scene_tree = try scene.tree.createSceneTree();
+    hidden_scene_tree.node.setEnabled(false);
 
     self.* = .{
         .wl_server = wl_server,
@@ -94,6 +99,7 @@ pub fn init(self: *hwc.Server) !void {
         .screencopy_manager = try wlr.ScreencopyManagerV1.create(wl_server),
         .xdg_output_manager = try wlr.XdgOutputManagerV1.create(wl_server, output_layout),
         .presentation = try wlr.Presentation.create(wl_server, backend),
+        .hidden = hidden_scene_tree,
     };
 
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
@@ -180,6 +186,7 @@ pub fn focusToplevel(
     surface: *wlr.Surface,
 ) void {
     const wlr_seat = self.input_manager.seat.wlr_seat;
+    self.focused = toplevel;
 
     if (wlr_seat.keyboard_state.focused_surface) |previous_surface| {
         if (previous_surface == surface) return;

@@ -21,6 +21,8 @@ virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
 virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
 pointer_gestures: *wlr.PointerGesturesV1,
 pointer_constraints: *wlr.PointerConstraintsV1,
+input_method_manager: *wlr.InputMethodManagerV2,
+text_input_manager: *wlr.TextInputManagerV3,
 
 new_input: wl.Listener(*wlr.InputDevice) =
     wl.Listener(*wlr.InputDevice).init(handleNewInput),
@@ -30,6 +32,10 @@ new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) 
     wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer).init(handleNewVirtualPointer),
 new_constraint: wl.Listener(*wlr.PointerConstraintV1) =
     wl.Listener(*wlr.PointerConstraintV1).init(handleNewConstraint),
+new_input_method: wl.Listener(*wlr.InputMethodV2) =
+    wl.Listener(*wlr.InputMethodV2).init(handleNewInputMethod),
+new_text_input: wl.Listener(*wlr.TextInputV3) =
+    wl.Listener(*wlr.TextInputV3).init(handleNewTextInput),
 
 pub fn init(self: *hwc.input.Manager) !void {
     self.* = .{
@@ -40,6 +46,8 @@ pub fn init(self: *hwc.input.Manager) !void {
         .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(server.wl_server),
         .pointer_gestures = try wlr.PointerGesturesV1.create(server.wl_server),
         .pointer_constraints = try wlr.PointerConstraintsV1.create(server.wl_server),
+        .input_method_manager = try wlr.InputMethodManagerV2.create(server.wl_server),
+        .text_input_manager = try wlr.TextInputManagerV3.create(server.wl_server),
     };
 
     try self.seat.init();
@@ -111,6 +119,26 @@ fn handleNewConstraint(
 ) void {
     hwc.input.PointerConstraint.create(wlr_pointer_constraint) catch {
         wlr_pointer_constraint.resource.postNoMemory();
+    };
+}
+
+fn handleNewInputMethod(
+    listener: *wl.Listener(*wlr.InputMethodV2),
+    wlr_input_method: *wlr.InputMethodV2,
+) void {
+    const input_manager: *hwc.input.Manager = @fieldParentPtr("new_input_method", listener);
+    input_manager.seat.relay.newInputMethod(wlr_input_method);
+}
+
+fn handleNewTextInput(
+    listener: *wl.Listener(*wlr.TextInputV3),
+    wlr_text_input: *wlr.TextInputV3,
+) void {
+    const input_manager: *hwc.input.Manager = @fieldParentPtr("new_text_input", listener);
+    input_manager.seat.relay.newTextInput(wlr_text_input) catch {
+        log.err("out of memory", .{});
+        wlr_text_input.resource.postNoMemory();
+        return;
     };
 }
 
