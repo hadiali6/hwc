@@ -10,6 +10,12 @@ const posix = std.posix;
 const fd_t = posix.fd_t;
 const pid_t = posix.pid_t;
 
+const wlr = @import("wlroots");
+
+const hwc = @import("hwc.zig");
+
+const server = &@import("root").server;
+
 var original_rlimit: ?posix.rlimit = null;
 
 pub fn processSetup() void {
@@ -244,4 +250,66 @@ pub fn pipedSpawnWithStreams(cmd: []const u8) !ProcessResult {
 
         return info;
     }
+}
+
+const Data = struct {
+    const Self = @This();
+
+    status: union(enum) {
+        fail,
+        success: *wlr.Output,
+    },
+    width: c_uint,
+    height: c_uint,
+
+    fn processBackend(backend: *wlr.Backend, data: ?*anyopaque) callconv(.C) void {
+        const result: *Self = if (data) |d|
+            @alignCast(@ptrCast(d))
+        else
+            unreachable;
+
+        if (backend.isWl()) {
+            const wlr_output = backend.wlOuputCreate() catch {
+                result.status = .fail;
+                return;
+            };
+
+            result.status = .{ .success = wlr_output };
+        } else if (backend.isHeadless()) {
+            const wlr_output = backend.headlessAddOutput(result.width, result.height) catch {
+                result.status = .fail;
+                return;
+            };
+
+            result.status = .{ .success = wlr_output };
+        } else if (wlr.config.has_x11_backend) {
+            if (backend.isX11()) {
+                const wlr_output = backend.x11OutputCreate() catch {
+                    result.status = .fail;
+                    return;
+                };
+
+                result.status = .{ .success = wlr_output };
+            }
+        }
+    }
+};
+
+pub fn createOutput(width: c_uint, height: c_uint) !*wlr.Output {
+    debug.assert(server.backend.isMulti());
+
+    var result = Data{
+        .status = undefined,
+        .width = width,
+        .height = height,
+    };
+
+    server.backend.multiForEachBackend(Data.processBackend, &result);
+
+    if (result.status == .fail) {
+        log.err("output can only be created on Wayland, X11, and headless backends", .{});
+        return error.CreateOutputFailed;
+    }
+
+    return result.status.success;
 }

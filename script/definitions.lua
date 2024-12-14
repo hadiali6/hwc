@@ -36,3 +36,23 @@ function hwc.remove_keybind_by_id(id) end
 ---@param modifiers string # modifiers.
 ---@return boolean # true if removed, false if not removed.
 function hwc.remove_keybind(key, modifiers) end
+
+---**Create a new output.**
+---> Only available in Wayland, Headless, and X11 backends.
+---> Generally intended for developer use for testing multi-monitor functionality.
+---> Headless outputs can also be useful when dealing with VNC applications.
+---
+---Under the hood, this uses the following wlroots functions for their corresponding backends:
+---```c
+---struct wlr_output *wlr_headless_add_output(struct wlr_backend *backend, unsigned int width, unsigned int height);
+---```
+---```c
+---struct wlr_output *wlr_wl_output_create(struct wlr_backend *backend);
+---```
+---```c
+---struct wlr_output *wlr_x11_output_create(struct wlr_backend *backend);
+---```
+---
+---@param width integer|1920 # Only applies to headless backend. Defaults to 1920
+---@param height integer|1080 # Only applies to headless backend. Defaults to 1080
+function hwc.create_output(width, height) end

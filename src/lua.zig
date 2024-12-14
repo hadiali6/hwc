@@ -29,6 +29,7 @@ pub fn init() !*Lua {
         .{ .name = "add_keybind", .func = ziglua.wrap(addKeybind) },
         .{ .name = "remove_keybind", .func = ziglua.wrap(removeKeybind) },
         .{ .name = "remove_keybind_by_id", .func = ziglua.wrap(removeKeybindById) },
+        .{ .name = "create_output", .func = ziglua.wrap(createOutput) },
     });
 
     try setPackagePath(lua, util.allocator);
@@ -358,4 +359,34 @@ fn removeKeybindById(lua: *Lua) i32 {
 
     lua.pushBoolean(false);
     return 1;
+}
+
+fn createOutput(lua: *Lua) i32 {
+    if (!lua.isNumber(1) and !lua.isNoneOrNil(1)) {
+        lua.raiseErrorStr("width is not a integer", .{});
+        return 0;
+    }
+    if (!lua.isNumber(2) and !lua.isNoneOrNil(2)) {
+        lua.raiseErrorStr("height is not a integer", .{});
+        return 0;
+    }
+
+    const width = if (!lua.isNoneOrNil(1))
+        lua.toInteger(1) catch unreachable
+    else
+        1920;
+
+    const height = if (!lua.isNoneOrNil(2))
+        lua.toInteger(2) catch unreachable
+    else
+        1080;
+
+    if (width < 0 or height < 0) {
+        lua.raiseErrorStr("height cannot be negative", .{});
+        return 0;
+    }
+
+    _ = api.createOutput(@intCast(width), @intCast(height)) catch {};
+
+    return 0;
 }
