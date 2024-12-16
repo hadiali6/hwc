@@ -424,7 +424,7 @@ const Output = struct {
     scale: f32,
     enabled: bool,
     adaptive_sync_supported: bool,
-    adaptive_sync_status: wlr.Output.AdaptiveSyncStatus,
+    adaptive_sync_enabled: bool,
     transform: wl.Output.Transform,
 
     fn init(self: *Output, wlr_output: *wlr.Output) void {
@@ -450,7 +450,10 @@ const Output = struct {
         self.scale = wlr_output.scale;
         self.enabled = wlr_output.enabled;
         self.adaptive_sync_supported = wlr_output.adaptive_sync_supported;
-        self.adaptive_sync_status = wlr_output.adaptive_sync_status;
+        self.adaptive_sync_enabled = switch (wlr_output.adaptive_sync_status) {
+            .enabled => true,
+            .disabled => false,
+        };
         self.transform = wlr_output.transform;
     }
 
@@ -490,7 +493,7 @@ const Output = struct {
         } else if (mem.eql(u8, field, "adaptive_sync_supported")) {
             lua.pushBoolean(self.adaptive_sync_supported);
         } else if (mem.eql(u8, field, "adaptive_sync_status")) {
-            _ = lua.pushString(@tagName(self.adaptive_sync_status));
+            lua.pushBoolean(self.adaptive_sync_enabled);
         } else if (mem.eql(u8, field, "transform")) {
             _ = lua.pushString(@tagName(self.transform));
         } else {
