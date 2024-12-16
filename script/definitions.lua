@@ -37,6 +37,35 @@ function hwc.remove_keybind_by_id(id) end
 ---@return boolean # true if removed, false if not removed.
 function hwc.remove_keybind(key, modifiers) end
 
+---@alias hwc.Output.Backend
+---| "drm"
+---| "wayland"
+---| "x11"
+---| "headless"
+
+---@alias hwc.Output.Transform
+---| "normal"
+---| "90"
+---| "180"
+---| "270"
+---| "flipped"
+---| "flipped_90"
+---| "flipped_180"
+---| "flipped_270"
+
+---@class hwc.Output
+---@field name string #
+---@field model string? #
+---@field make string? #
+---@field backend hwc.Output.Backend #
+---@field width integer #
+---@field height integer #
+---@field refresh_rate integer #
+---@field enabled boolean #
+---@field adaptive_scale_enabled boolean #
+---@field scale boolean #
+---@field transform hwc.Output.Transform #
+
 ---**Create a new output.**
 ---> Only available in Wayland, Headless, and X11 backends.
 ---> Generally intended for developer use for testing multi-monitor functionality.
@@ -55,4 +84,5 @@ function hwc.remove_keybind(key, modifiers) end
 ---
 ---@param width integer|1920 # Only applies to headless backend. Defaults to 1920
 ---@param height integer|1080 # Only applies to headless backend. Defaults to 1080
+---@return hwc.Output
 function hwc.create_output(width, height) end
