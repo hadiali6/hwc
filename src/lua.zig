@@ -416,6 +416,7 @@ const Output = struct {
     name: [*:0]u8,
     make: ?[*:0]u8,
     model: ?[*:0]u8,
+    serial: ?[*:0]u8,
     description: ?[*:0]u8,
     backend: enum { drm, wayland, x11, headless },
     width: i32,
@@ -431,6 +432,7 @@ const Output = struct {
         self.name = wlr_output.name;
         self.make = wlr_output.make;
         self.model = wlr_output.model;
+        self.serial = wlr_output.serial;
         self.description = wlr_output.description;
 
         self.backend = if (wlr_output.isDrm())
@@ -475,6 +477,12 @@ const Output = struct {
         } else if (mem.eql(u8, field, "description")) {
             if (self.description) |description| {
                 _ = lua.pushString(self.name[0..mem.len(description)]);
+            } else {
+                lua.pushNil();
+            }
+        } else if (mem.eql(u8, field, "serial")) {
+            if (self.serial) |serial| {
+                _ = lua.pushString(self.name[0..mem.len(serial)]);
             } else {
                 lua.pushNil();
             }
