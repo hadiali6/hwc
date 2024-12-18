@@ -156,7 +156,7 @@ fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void
                 seat.keyboardNotifyEnter(wlr_surface);
             }
         },
-        .pointer => {
+        .touch, .pointer => {
             const device = try util.allocator.create(hwc.input.Device);
             errdefer {
                 device.deinit();
@@ -166,7 +166,7 @@ fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void
             try device.init(wlr_input_device);
             self.seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
         },
-        .touch, .tablet, .tablet_pad, .@"switch" => |device_type| {
+        .tablet, .tablet_pad, .@"switch" => |device_type| {
             log.warn("detected unsopported device: {s}", .{@tagName(device_type)});
         },
     }

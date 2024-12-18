@@ -6,10 +6,16 @@ const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
 const hwc = @import("../hwc.zig");
+const util = @import("../util.zig");
 
 const server = &@import("root").server;
 
 const Mode = enum { passthrough, move, resize };
+
+const LayoutPoint = struct {
+    lx: f64,
+    ly: f64,
+};
 
 wlr_cursor: *wlr.Cursor,
 xcursor_manager: *wlr.XcursorManager,
@@ -18,6 +24,10 @@ xcursor_manager: *wlr.XcursorManager,
 /// This constraint is not necessarily active, activation only occurs once the cursor
 /// has been moved inside the constraint region.
 constraint: ?*hwc.input.PointerConstraint = null,
+
+/// Keeps track of the last known location of all touch points in layout coordinates.
+/// This information is necessary for proper touch dnd support if there are multiple touch points.
+touch_points: std.AutoHashMapUnmanaged(i32, LayoutPoint) = .{},
 
 mode: Mode = .passthrough,
 grabbed_toplevel: ?*hwc.XdgToplevel = null,
@@ -56,6 +66,17 @@ hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) =
 hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) =
     wl.Listener(*wlr.Pointer.event.HoldEnd).init(handleHoldEnd),
 
+touch_up: wl.Listener(*wlr.Touch.event.Up) =
+    wl.Listener(*wlr.Touch.event.Up).init(handleTouchUp),
+touch_down: wl.Listener(*wlr.Touch.event.Down) =
+    wl.Listener(*wlr.Touch.event.Down).init(handleTouchDown),
+touch_motion: wl.Listener(*wlr.Touch.event.Motion) =
+    wl.Listener(*wlr.Touch.event.Motion).init(handleTouchMotion),
+touch_cancel: wl.Listener(*wlr.Touch.event.Cancel) =
+    wl.Listener(*wlr.Touch.event.Cancel).init(handleTouchCancel),
+touch_frame: wl.Listener(void) =
+    wl.Listener(void).init(handleTouchFrame),
+
 pub fn init(self: *hwc.input.Cursor) !void {
     self.* = .{
         .wlr_cursor = try wlr.Cursor.create(),
@@ -81,6 +102,12 @@ pub fn init(self: *hwc.input.Cursor) !void {
 
     self.wlr_cursor.events.hold_begin.add(&self.hold_begin);
     self.wlr_cursor.events.hold_end.add(&self.hold_end);
+
+    self.wlr_cursor.events.touch_up.add(&self.touch_up);
+    self.wlr_cursor.events.touch_down.add(&self.touch_down);
+    self.wlr_cursor.events.touch_motion.add(&self.touch_motion);
+    self.wlr_cursor.events.touch_cancel.add(&self.touch_cancel);
+    self.wlr_cursor.events.touch_frame.add(&self.touch_frame);
 }
 
 pub fn deinit(self: *hwc.input.Cursor) void {
@@ -423,4 +450,78 @@ fn handleHoldEnd(
         event.time_msec,
         event.cancelled,
     );
+}
+
+fn handleTouchUp(listener: *wl.Listener(*wlr.Touch.event.Up), event: *wlr.Touch.event.Up) void {
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_up", listener);
+
+    if (cursor.touch_points.remove(event.touch_id)) {
+        _ = server.input_manager.seat.wlr_seat.touchNotifyUp(event.time_msec, event.touch_id);
+    }
+}
+
+fn handleTouchDown(listener: *wl.Listener(*wlr.Touch.event.Down), event: *wlr.Touch.event.Down) void {
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_down", listener);
+
+    var lx: f64 = undefined;
+    var ly: f64 = undefined;
+    cursor.wlr_cursor.absoluteToLayoutCoords(event.device, event.x, event.y, &lx, &ly);
+
+    cursor.touch_points.putNoClobber(util.allocator, event.touch_id, .{ .lx = lx, .ly = ly }) catch {
+        log.err("out of memory", .{});
+        return;
+    };
+
+    if (server.toplevelAt(lx, ly)) |result| {
+        server.focusToplevel(result.toplevel, result.surface);
+
+        _ = server.input_manager.seat.wlr_seat.touchNotifyDown(
+            result.surface,
+            event.time_msec,
+            event.touch_id,
+            event.x,
+            event.y,
+        );
+    }
+}
+
+fn handleTouchMotion(listener: *wl.Listener(*wlr.Touch.event.Motion), event: *wlr.Touch.event.Motion) void {
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_motion", listener);
+
+    if (cursor.touch_points.getPtr(event.touch_id)) |point| {
+        cursor.wlr_cursor.absoluteToLayoutCoords(
+            event.device,
+            event.x,
+            event.y,
+            &point.lx,
+            &point.ly,
+        );
+
+        if (server.toplevelAt(point.lx, point.ly)) |result| {
+            server.input_manager.seat.wlr_seat.touchNotifyMotion(
+                event.time_msec,
+                event.touch_id,
+                result.sx,
+                result.sy,
+            );
+        }
+    }
+}
+
+fn handleTouchCancel(
+    listener: *wl.Listener(*wlr.Touch.event.Cancel),
+    _: *wlr.Touch.event.Cancel,
+) void {
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_cancel", listener);
+    const wlr_seat = server.input_manager.seat.wlr_seat;
+
+    cursor.touch_points.clearRetainingCapacity();
+
+    while (wlr_seat.touch_state.touch_points.first()) |touch_point| {
+        wlr_seat.touchNotifyCancel(touch_point.client);
+    }
+}
+
+fn handleTouchFrame(_: *wl.Listener(void)) void {
+    server.input_manager.seat.wlr_seat.touchNotifyFrame();
 }

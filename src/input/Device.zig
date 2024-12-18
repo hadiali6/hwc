@@ -92,11 +92,11 @@ fn handleDestroy(
             const keyboard: *hwc.input.Keyboard = @fieldParentPtr("device", device);
             keyboard.deinit();
         },
-        .pointer => {
+        .touch, .pointer => {
             device.deinit();
             util.allocator.destroy(device);
         },
-        .touch, .tablet, .tablet_pad, .@"switch" => unreachable,
+        .tablet, .tablet_pad, .@"switch" => unreachable,
     }
 }
 
