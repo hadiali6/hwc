@@ -6,6 +6,9 @@ const log = std.log.scoped(.lua);
 const mem = std.mem;
 const posix = std.posix;
 
+const wayland = @import("wayland");
+const wl = wayland.server.wl;
+const wlr = @import("wlroots");
 const ziglua = @import("ziglua");
 
 const hwc = @import("hwc.zig");
@@ -22,6 +25,17 @@ pub fn init() !*Lua {
 
     lua.openLibs();
 
+    lua.pushFunction(ziglua.wrap(overrideType));
+    lua.setGlobal("type");
+
+    try lua.newMetatable("output_mt");
+    lua.pushFunction(ziglua.wrap(Output.index_cb));
+    lua.setField(-2, "__index");
+    _ = lua.pushString("hwc.Output");
+    lua.setField(-2, "hwc_type_name");
+    lua.pushFunction(ziglua.wrap(Output.tostring_cb));
+    lua.setField(-2, "__tostring");
+
     lua.registerFns("hwc", &[_]ziglua.FnReg{
         .{ .name = "spawn", .func = ziglua.wrap(spawn) },
         .{ .name = "exit", .func = ziglua.wrap(exit) },
@@ -29,7 +43,22 @@ pub fn init() !*Lua {
         .{ .name = "add_keybind", .func = ziglua.wrap(addKeybind) },
         .{ .name = "remove_keybind", .func = ziglua.wrap(removeKeybind) },
         .{ .name = "remove_keybind_by_id", .func = ziglua.wrap(removeKeybindById) },
+        .{ .name = "create_output", .func = ziglua.wrap(createOutput) },
     });
+
+    _ = lua.pushString(if (server.backend.isDrm())
+        "drm"
+    else if (server.backend.isWl())
+        "wayland"
+    else if (server.backend.isX11())
+        "x11"
+    else if (server.backend.isHeadless())
+        "headless"
+    else if (server.backend.isMulti())
+        "multi"
+    else
+        unreachable);
+    lua.setField(-2, "backend");
 
     try setPackagePath(lua, util.allocator);
 
@@ -106,6 +135,26 @@ fn getConfigPath(allocator: Allocator) ![:0]const u8 {
             return error.NoConfigFile;
         }
     };
+}
+
+fn overrideType(lua: *Lua) i32 {
+    lua.checkAny(1);
+
+    _ = lua.pushString(blk: {
+        const lua_type = lua.typeOf(1);
+
+        if (lua_type == .userdata) {
+            lua.getMetatable(1) catch break :blk "userdata";
+
+            if (lua.getField(-1, "hwc_type_name") == .string) {
+                break :blk lua.toString(-1) catch unreachable;
+            } else break :blk "userdata";
+        }
+
+        break :blk lua.typeName(lua_type);
+    });
+
+    return 1;
 }
 
 fn spawn(lua: *Lua) i32 {
@@ -357,5 +406,155 @@ fn removeKeybindById(lua: *Lua) i32 {
     }
 
     lua.pushBoolean(false);
+    return 1;
+}
+
+const Output = struct {
+    name: [*:0]u8,
+    make: ?[*:0]u8,
+    model: ?[*:0]u8,
+    serial: ?[*:0]u8,
+    description: ?[*:0]u8,
+    backend: enum { drm, wayland, x11, headless },
+    width: i32,
+    height: i32,
+    refresh: i32,
+    scale: f32,
+    enabled: bool,
+    adaptive_sync_supported: bool,
+    adaptive_sync_enabled: bool,
+    transform: wl.Output.Transform,
+
+    fn init(self: *Output, wlr_output: *wlr.Output) void {
+        self.name = wlr_output.name;
+        self.make = wlr_output.make;
+        self.model = wlr_output.model;
+        self.serial = wlr_output.serial;
+        self.description = wlr_output.description;
+
+        self.backend = if (wlr_output.isDrm())
+            .drm
+        else if (wlr_output.isWl())
+            .wayland
+        else if (wlr_output.isX11())
+            .x11
+        else if (wlr_output.isHeadless())
+            .headless
+        else
+            unreachable;
+
+        self.width = wlr_output.width;
+        self.height = wlr_output.height;
+        self.refresh = wlr_output.refresh;
+        self.scale = wlr_output.scale;
+        self.enabled = wlr_output.enabled;
+        self.adaptive_sync_supported = wlr_output.adaptive_sync_supported;
+        self.adaptive_sync_enabled = switch (wlr_output.adaptive_sync_status) {
+            .enabled => true,
+            .disabled => false,
+        };
+        self.transform = wlr_output.transform;
+    }
+
+    fn pushField(self: *Output, lua: *Lua, field: [:0]const u8) void {
+        if (mem.eql(u8, field, "name")) {
+            _ = lua.pushString(self.name[0..mem.len(self.name)]);
+        } else if (mem.eql(u8, field, "make")) {
+            if (self.make) |make| {
+                _ = lua.pushString(self.name[0..mem.len(make)]);
+            } else {
+                lua.pushNil();
+            }
+        } else if (mem.eql(u8, field, "model")) {
+            if (self.make) |model| {
+                _ = lua.pushString(self.name[0..mem.len(model)]);
+            } else {
+                lua.pushNil();
+            }
+        } else if (mem.eql(u8, field, "description")) {
+            if (self.description) |description| {
+                _ = lua.pushString(self.name[0..mem.len(description)]);
+            } else {
+                lua.pushNil();
+            }
+        } else if (mem.eql(u8, field, "serial")) {
+            if (self.serial) |serial| {
+                _ = lua.pushString(self.name[0..mem.len(serial)]);
+            } else {
+                lua.pushNil();
+            }
+        } else if (mem.eql(u8, field, "backend")) {
+            _ = lua.pushString(@tagName(self.backend));
+        } else if (mem.eql(u8, field, "width")) {
+            lua.pushInteger(@intCast(self.width));
+        } else if (mem.eql(u8, field, "height")) {
+            lua.pushInteger(@intCast(self.height));
+        } else if (mem.eql(u8, field, "refresh")) {
+            lua.pushInteger(@intCast(self.refresh));
+        } else if (mem.eql(u8, field, "scale")) {
+            lua.pushNumber(@floatCast(self.scale));
+        } else if (mem.eql(u8, field, "enabled")) {
+            lua.pushBoolean(self.enabled);
+        } else if (mem.eql(u8, field, "adaptive_sync_supported")) {
+            lua.pushBoolean(self.adaptive_sync_supported);
+        } else if (mem.eql(u8, field, "adaptive_sync_status")) {
+            lua.pushBoolean(self.adaptive_sync_enabled);
+        } else if (mem.eql(u8, field, "transform")) {
+            _ = lua.pushString(@tagName(self.transform));
+        } else {
+            lua.pushNil();
+        }
+    }
+
+    fn index_cb(lua: *Lua) i32 {
+        std.debug.assert(lua.isUserdata(-2));
+        std.debug.assert(lua.isString(-1));
+
+        const output: *Output = lua.toUserdata(Output, -2) catch unreachable;
+        const index = lua.toString(-1) catch unreachable;
+        output.pushField(lua, index);
+        return 1;
+    }
+
+    fn tostring_cb(lua: *Lua) i32 {
+        const output: *Output = lua.toUserdata(Output, -1) catch unreachable;
+        _ = lua.pushFString("hwc.Output: %p", .{output});
+        return 1;
+    }
+};
+
+fn createOutput(lua: *Lua) i32 {
+    if (!lua.isNumber(1) and !lua.isNoneOrNil(1)) {
+        lua.raiseErrorStr("width is not a integer", .{});
+        return 0;
+    }
+    if (!lua.isNumber(2) and !lua.isNoneOrNil(2)) {
+        lua.raiseErrorStr("height is not a integer", .{});
+        return 0;
+    }
+
+    const width = if (!lua.isNoneOrNil(1))
+        lua.toInteger(1) catch unreachable
+    else
+        1920;
+
+    const height = if (!lua.isNoneOrNil(2))
+        lua.toInteger(2) catch unreachable
+    else
+        1080;
+
+    if (width < 0 or height < 0) {
+        lua.raiseErrorStr("height cannot be negative", .{});
+        return 0;
+    }
+
+    const wlr_output = api.createOutput(@intCast(width), @intCast(height)) catch return 0;
+    const output: *Output = lua.newUserdata(Output);
+    output.init(wlr_output);
+
+    _ = lua.getMetatableRegistry("output_mt");
+    std.debug.assert(lua.isTable(-1));
+    lua.setMetatable(-2);
+
     return 1;
 }
