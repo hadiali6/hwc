@@ -1,27 +1,23 @@
 # hwc
 Hadi's Wayland Compositor
 
-# dependencies
-libwayland
-libxkbcommon
-pixman
-wayland-protocols
-wlroots (0.18)
-libc
+# Building
 
-# build
-`zig build` or to build and run `zig build run -- <args>`
+**Install the following dependencies:**
 
-# run
-`hwc <arg command>`
+- [zig](https://ziglang.org/download/) 0.13
+- wayland
+- wayland-protocols
+- [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) 0.18
+- xkbcommon
+- libevdev
+- pixman
+- pkg-config
 
-# help
-`hwc -h`
+**Then run:**
+```
+zig build -Doptimize=ReleaseSafe --prefix ~/.local/ install
+```
 
-
-# binds
-`Alt+Escape`: Terminate the compositor
-`Alt+F1`: Cycle between windows
-`Alt+m`: Minimize current window
-`Alt+Shift+m`: Maximize current window
-`Alt+f`: Fullscreen current window
+**Note:** Traditionally, most programs install under the `/usr` prefix, requiring admin privileges. Feel free to do that to install hwc as a system binary.
+In the above, `~/.local/bin` will be where the hwc binary will live. You many need to update your `$PATH` to include `~/.local/bin`
