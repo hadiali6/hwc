@@ -11,14 +11,14 @@ const util = @import("util.zig");
 decoration_mode: wlr.XdgToplevelDecorationV1.Mode,
 keyboard_repeat_rate: u31,
 keyboard_repeat_delay: u31,
-keybinds: std.ArrayListUnmanaged(hwc.Keybind),
+keybinds: std.ArrayListUnmanaged(hwc.input.Keybind),
 
 pub fn init(self: *hwc.Config) !void {
     self.* = .{
         .decoration_mode = .client_side,
         .keyboard_repeat_rate = 50,
         .keyboard_repeat_delay = 300,
-        .keybinds = try std.ArrayListUnmanaged(hwc.Keybind).initCapacity(util.allocator, 10),
+        .keybinds = try std.ArrayListUnmanaged(hwc.input.Keybind).initCapacity(util.allocator, 10),
     };
 }
 

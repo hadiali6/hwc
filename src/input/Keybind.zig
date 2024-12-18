@@ -6,7 +6,8 @@ const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 const ziglua = @import("ziglua");
 
-const hwc = @import("hwc.zig");
+const hwc = @import("../hwc.zig");
+
 const lua_state = &@import("root").lua_state;
 
 keysym: xkb.Keysym,
@@ -29,7 +30,7 @@ repeat: bool,
 layout_index: ?u32,
 
 pub fn match(
-    keybind: hwc.Keybind,
+    keybind: hwc.input.Keybind,
     keycode: xkb.Keycode,
     modifiers: wlr.Keyboard.ModifierMask,
     released: bool,
@@ -148,7 +149,7 @@ pub fn parseModifiers(modifiers_str: []const u8) !wlr.Keyboard.ModifierMask {
     return modifiers;
 }
 
-pub fn runLuaCallback(self: *const hwc.Keybind) !void {
+pub fn runLuaCallback(self: *const hwc.input.Keybind) !void {
     if (self.lua_fn_reference == ziglua.ref_nil) {
         log.err("No Lua function stored", .{});
         return error.NoLuaFunctionStored;
