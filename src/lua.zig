@@ -20,9 +20,6 @@ const server = &@import("root").server;
 const Allocator = std.mem.Allocator;
 const Lua = ziglua.Lua;
 
-// TODO: remove after https://codeberg.org/ifreund/zig-wlroots/pulls/86 is merged
-extern fn wlr_backend_is_drm(backend: *wlr.Backend) bool;
-
 pub fn init() !*Lua {
     var lua = try Lua.init(util.allocator);
 
@@ -49,7 +46,7 @@ pub fn init() !*Lua {
         .{ .name = "create_output", .func = ziglua.wrap(createOutput) },
     });
 
-    _ = lua.pushString(if (wlr_backend_is_drm(server.backend))
+    _ = lua.pushString(if (server.backend.isDrm())
         "drm"
     else if (server.backend.isWl())
         "wayland"
