@@ -1,5 +1,5 @@
 test-touch:
     uv venv
     source ./.venv/bin/activate
-    uv pip install python-uinput
+    uv pip install libevdev
     uv run ./tests/touch.py
