@@ -23,6 +23,7 @@ pointer_gestures: *wlr.PointerGesturesV1,
 pointer_constraints: *wlr.PointerConstraintsV1,
 input_method_manager: *wlr.InputMethodManagerV2,
 text_input_manager: *wlr.TextInputManagerV3,
+tablet_manager: *wlr.TabletManagerV2,
 
 new_input: wl.Listener(*wlr.InputDevice) =
     wl.Listener(*wlr.InputDevice).init(handleNewInput),
@@ -48,6 +49,7 @@ pub fn init(self: *hwc.input.Manager) !void {
         .pointer_constraints = try wlr.PointerConstraintsV1.create(server.wl_server),
         .input_method_manager = try wlr.InputMethodManagerV2.create(server.wl_server),
         .text_input_manager = try wlr.TextInputManagerV3.create(server.wl_server),
+        .tablet_manager = try wlr.TabletManagerV2.create(server.wl_server),
     };
 
     try self.seat.init();
@@ -166,7 +168,15 @@ fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void
             try device.init(wlr_input_device);
             self.seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
         },
-        .tablet, .tablet_pad, .@"switch" => |device_type| {
+        .tablet => {
+            const tablet = try util.allocator.create(hwc.input.Tablet);
+
+            try tablet.init(wlr_input_device);
+            errdefer tablet.deinit();
+
+            self.seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
+        },
+        .tablet_pad, .@"switch" => |device_type| {
             log.warn("detected unsopported device: {s}", .{@tagName(device_type)});
         },
     }

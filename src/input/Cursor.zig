@@ -77,6 +77,15 @@ touch_cancel: wl.Listener(*wlr.Touch.event.Cancel) =
 touch_frame: wl.Listener(void) =
     wl.Listener(void).init(handleTouchFrame),
 
+tablet_tool_axis: wl.Listener(*wlr.Tablet.event.Axis) =
+    wl.Listener(*wlr.Tablet.event.Axis).init(handleTabletToolAxis),
+tablet_tool_proximity: wl.Listener(*wlr.Tablet.event.Proximity) =
+    wl.Listener(*wlr.Tablet.event.Proximity).init(handleTabletToolProximity),
+tablet_tool_tip: wl.Listener(*wlr.Tablet.event.Tip) =
+    wl.Listener(*wlr.Tablet.event.Tip).init(handleTabletToolTip),
+tablet_tool_button: wl.Listener(*wlr.Tablet.event.Button) =
+    wl.Listener(*wlr.Tablet.event.Button).init(handleTabletToolButton),
+
 pub fn init(self: *hwc.input.Cursor) !void {
     self.* = .{
         .wlr_cursor = try wlr.Cursor.create(),
@@ -108,6 +117,11 @@ pub fn init(self: *hwc.input.Cursor) !void {
     self.wlr_cursor.events.touch_motion.add(&self.touch_motion);
     self.wlr_cursor.events.touch_cancel.add(&self.touch_cancel);
     self.wlr_cursor.events.touch_frame.add(&self.touch_frame);
+
+    self.wlr_cursor.events.tablet_tool_axis.add(&self.tablet_tool_axis);
+    self.wlr_cursor.events.tablet_tool_proximity.add(&self.tablet_tool_proximity);
+    self.wlr_cursor.events.tablet_tool_tip.add(&self.tablet_tool_tip);
+    self.wlr_cursor.events.tablet_tool_button.add(&self.tablet_tool_button);
 }
 
 pub fn deinit(self: *hwc.input.Cursor) void {
@@ -524,4 +538,66 @@ fn handleTouchCancel(
 
 fn handleTouchFrame(_: *wl.Listener(void)) void {
     server.input_manager.seat.wlr_seat.touchNotifyFrame();
+}
+
+fn handleTabletToolAxis(
+    _: *wl.Listener(*wlr.Tablet.event.Axis),
+    event: *wlr.Tablet.event.Axis,
+) void {
+    const device: *hwc.input.Device = @ptrFromInt(event.device.data);
+    const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
+    const tool = hwc.input.Tablet.Tool.get(
+        server.input_manager.seat.wlr_seat,
+        event.tool,
+    ) catch return;
+
+    log.debug("axis", .{});
+
+    tool.axis(tablet, event);
+}
+
+fn handleTabletToolProximity(
+    _: *wl.Listener(*wlr.Tablet.event.Proximity),
+    event: *wlr.Tablet.event.Proximity,
+) void {
+    const device: *hwc.input.Device = @ptrFromInt(event.device.data);
+    const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
+    const tool = hwc.input.Tablet.Tool.get(
+        server.input_manager.seat.wlr_seat,
+        event.tool,
+    ) catch return;
+
+    log.debug("proximity", .{});
+
+    tool.proximity(tablet, event);
+}
+fn handleTabletToolTip(
+    _: *wl.Listener(*wlr.Tablet.event.Tip),
+    event: *wlr.Tablet.event.Tip,
+) void {
+    const device: *hwc.input.Device = @ptrFromInt(event.device.data);
+    const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
+    const tool = hwc.input.Tablet.Tool.get(
+        server.input_manager.seat.wlr_seat,
+        event.tool,
+    ) catch return;
+
+    log.debug("tip", .{});
+
+    tool.tip(tablet, event);
+}
+fn handleTabletToolButton(
+    _: *wl.Listener(*wlr.Tablet.event.Button),
+    event: *wlr.Tablet.event.Button,
+) void {
+    const device: *hwc.input.Device = @ptrFromInt(event.device.data);
+    const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
+    const tool = hwc.input.Tablet.Tool.get(
+        server.input_manager.seat.wlr_seat,
+        event.tool,
+    ) catch return;
+
+    log.debug("button", .{});
+
+    tool.button(tablet, event);
 }

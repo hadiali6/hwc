@@ -96,7 +96,11 @@ fn handleDestroy(
             device.deinit();
             util.allocator.destroy(device);
         },
-        .tablet, .tablet_pad, .@"switch" => unreachable,
+        .tablet => {
+            const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
+            tablet.deinit();
+        },
+        .tablet_pad, .@"switch" => unreachable,
     }
 }
 
