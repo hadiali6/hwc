@@ -15,5 +15,6 @@ pub const input = struct {
     pub const PointerConstraint = @import("input/PointerConstraint.zig");
     pub const Relay = @import("input/Relay.zig");
     pub const Seat = @import("input/Seat.zig");
+    pub const Switch = @import("input/Switch.zig");
     pub const Tablet = @import("input/Tablet.zig");
 };

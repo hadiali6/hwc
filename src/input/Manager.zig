@@ -182,8 +182,11 @@ fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void
             try tablet_pad.init(wlr_input_device);
             errdefer tablet_pad.deinit();
         },
-        .@"switch" => |device_type| {
-            log.warn("detected unsopported device: {s}", .{@tagName(device_type)});
+        .@"switch" => {
+            const switch_device = try util.allocator.create(hwc.input.Switch);
+
+            try switch_device.init(wlr_input_device);
+            errdefer switch_device.deinit();
         },
     }
 }
