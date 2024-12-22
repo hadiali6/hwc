@@ -90,6 +90,8 @@ fn handleKey(
 ) void {
     const keyboard: *hwc.input.Keyboard = @fieldParentPtr("key", listener);
 
+    server.input_manager.handleActivity();
+
     var device = &keyboard.device;
     const wlr_keyboard = device.wlr_input_device.toKeyboard();
 

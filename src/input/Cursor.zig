@@ -149,6 +149,7 @@ fn handleAxis(
     _: *wl.Listener(*wlr.Pointer.event.Axis),
     event: *wlr.Pointer.event.Axis,
 ) void {
+    server.input_manager.handleActivity();
     server.input_manager.seat.wlr_seat.pointerNotifyAxis(
         event.time_msec,
         event.orientation,
@@ -165,6 +166,7 @@ fn handleButton(
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("button", listener);
 
+    server.input_manager.handleActivity();
     _ = server.input_manager.seat.wlr_seat.pointerNotifyButton(
         event.time_msec,
         event.button,
@@ -190,6 +192,8 @@ fn handleMotion(
     event: *wlr.Pointer.event.Motion,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("motion", listener);
+
+    server.input_manager.handleActivity();
 
     var dx: f64 = event.delta_x;
     var dy: f64 = event.delta_y;
@@ -228,6 +232,8 @@ fn handleMotionAbsolute(
     event: *wlr.Pointer.event.MotionAbsolute,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("motion_absolute", listener);
+
+    server.input_manager.handleActivity();
     cursor.wlr_cursor.warpAbsolute(event.device, event.x, event.y);
 
     var lx: f64 = undefined;
@@ -469,6 +475,8 @@ fn handleHoldEnd(
 fn handleTouchUp(listener: *wl.Listener(*wlr.Touch.event.Up), event: *wlr.Touch.event.Up) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_up", listener);
 
+    server.input_manager.handleActivity();
+
     if (cursor.touch_points.remove(event.touch_id)) {
         _ = server.input_manager.seat.wlr_seat.touchNotifyUp(event.time_msec, event.touch_id);
     }
@@ -476,6 +484,8 @@ fn handleTouchUp(listener: *wl.Listener(*wlr.Touch.event.Up), event: *wlr.Touch.
 
 fn handleTouchDown(listener: *wl.Listener(*wlr.Touch.event.Down), event: *wlr.Touch.event.Down) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_down", listener);
+
+    server.input_manager.handleActivity();
 
     var lx: f64 = undefined;
     var ly: f64 = undefined;
@@ -501,6 +511,8 @@ fn handleTouchDown(listener: *wl.Listener(*wlr.Touch.event.Down), event: *wlr.To
 
 fn handleTouchMotion(listener: *wl.Listener(*wlr.Touch.event.Motion), event: *wlr.Touch.event.Motion) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_motion", listener);
+
+    server.input_manager.handleActivity();
 
     if (cursor.touch_points.getPtr(event.touch_id)) |point| {
         cursor.wlr_cursor.absoluteToLayoutCoords(
@@ -529,6 +541,8 @@ fn handleTouchCancel(
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_cancel", listener);
     const wlr_seat = server.input_manager.seat.wlr_seat;
 
+    server.input_manager.handleActivity();
+
     cursor.touch_points.clearRetainingCapacity();
 
     while (wlr_seat.touch_state.touch_points.first()) |touch_point| {
@@ -537,6 +551,7 @@ fn handleTouchCancel(
 }
 
 fn handleTouchFrame(_: *wl.Listener(void)) void {
+    server.input_manager.handleActivity();
     server.input_manager.seat.wlr_seat.touchNotifyFrame();
 }
 
@@ -546,6 +561,9 @@ fn handleTabletToolAxis(
 ) void {
     const device: *hwc.input.Device = @ptrFromInt(event.device.data);
     const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
+
+    server.input_manager.handleActivity();
+
     const tool = hwc.input.Tablet.Tool.get(
         server.input_manager.seat.wlr_seat,
         tablet,
@@ -561,6 +579,9 @@ fn handleTabletToolProximity(
 ) void {
     const device: *hwc.input.Device = @ptrFromInt(event.device.data);
     const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
+
+    server.input_manager.handleActivity();
+
     const tool = hwc.input.Tablet.Tool.get(
         server.input_manager.seat.wlr_seat,
         tablet,
@@ -575,6 +596,9 @@ fn handleTabletToolTip(
 ) void {
     const device: *hwc.input.Device = @ptrFromInt(event.device.data);
     const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
+
+    server.input_manager.handleActivity();
+
     const tool = hwc.input.Tablet.Tool.get(
         server.input_manager.seat.wlr_seat,
         tablet,
@@ -589,6 +613,9 @@ fn handleTabletToolButton(
 ) void {
     const device: *hwc.input.Device = @ptrFromInt(event.device.data);
     const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
+
+    server.input_manager.handleActivity();
+
     const tool = hwc.input.Tablet.Tool.get(
         server.input_manager.seat.wlr_seat,
         tablet,

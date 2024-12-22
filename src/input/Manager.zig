@@ -21,6 +21,7 @@ virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
 virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
 pointer_gestures: *wlr.PointerGesturesV1,
 pointer_constraints: *wlr.PointerConstraintsV1,
+idle_notifier: *wlr.IdleNotifierV1,
 input_method_manager: *wlr.InputMethodManagerV2,
 text_input_manager: *wlr.TextInputManagerV3,
 tablet_manager: *wlr.TabletManagerV2,
@@ -47,6 +48,7 @@ pub fn init(self: *hwc.input.Manager) !void {
         .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(server.wl_server),
         .pointer_gestures = try wlr.PointerGesturesV1.create(server.wl_server),
         .pointer_constraints = try wlr.PointerConstraintsV1.create(server.wl_server),
+        .idle_notifier = try wlr.IdleNotifierV1.create(server.wl_server),
         .input_method_manager = try wlr.InputMethodManagerV2.create(server.wl_server),
         .text_input_manager = try wlr.TextInputManagerV3.create(server.wl_server),
         .tablet_manager = try wlr.TabletManagerV2.create(server.wl_server),
@@ -69,6 +71,10 @@ pub fn deinit(self: *hwc.input.Manager) void {
 
     assert(self.devices.empty());
     self.seat.deinit();
+}
+
+pub fn handleActivity(self: *hwc.input.Manager) void {
+    self.idle_notifier.notifyActivity(self.seat.wlr_seat);
 }
 
 fn handleNewInput(

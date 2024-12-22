@@ -8,6 +8,8 @@ const wlr = @import("wlroots");
 const hwc = @import("../hwc.zig");
 const util = @import("../util.zig");
 
+const server = &@import("root").server;
+
 const Type = enum {
     lid,
     tablet,
@@ -50,6 +52,8 @@ pub fn deinit(self: *hwc.input.Switch) void {
 // This currently does nothing...
 // TODO: apply switch bindings
 fn handleToggle(_: *wl.Listener(*wlr.Switch.event.Toggle), event: *wlr.Switch.event.Toggle) void {
+    server.input_manager.handleActivity();
+
     var switch_type: Type = undefined;
     var switch_state: State = undefined;
 
