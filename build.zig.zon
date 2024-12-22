@@ -8,8 +8,8 @@
             .hash = "122008883160591808fa8244b73fe893ac696efb2aa0dcdc88b9c1fbff1703aada73",
         },
         .@"zig-wlroots" = .{
-            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/cf8b8d55ec31ab71559ff6527b756e5312c6e60d.tar.gz",
-            .hash = "122018bad9795d4d81c10a0766b47c712945baa9aaaed699b083c2f9ca31f643d8f2",
+            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/d6c3373c368ef4772ec994369bbe5214fc59f644.tar.gz",
+            .hash = "1220f4d9a3b5bdbd07d764f7c74a7e3e1cd19f7723959001625a8184051be460bea6",
         },
         .@"zig-xkbcommon" = .{
             .url = "https://codeberg.org/ifreund/zig-xkbcommon/archive/v0.2.0.tar.gz",
@@ -22,6 +22,10 @@
         .ziglua = .{
             .url = "https://github.com/natecraddock/ziglua/archive/67e12ea3cd80fc1d12a0c4790369da6d09163d04.tar.gz",
             .hash = "12202f4249188ea25db5865f392be775958991d44898df69242b41e446a92c41dc7f",
+        },
+        .@"zig-libinput" = .{
+            .url = "https://github.com/hadiali6/zig-libinput/archive/baf775cdce8147c7dcbae4159e8b010b665ebf11.tar.gz",
+            .hash = "1220965d0c4c33d569765c3e3ecf874604b55f90dc829d6bf831f433b84a56bbb94a",
         },
     },
 }

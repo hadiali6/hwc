@@ -36,6 +36,7 @@ pub fn build(b: *std.Build) void {
     const xkbcommon = b.dependency("zig-xkbcommon", .{}).module("xkbcommon");
     const pixman = b.dependency("zig-pixman", .{}).module("pixman");
     const wlroots = b.dependency("zig-wlroots", .{}).module("wlroots");
+    const libinput_bindings = b.dependency("zig-libinput", .{}).module("libinput");
 
     wlroots.addImport("wayland", wayland);
     wlroots.addImport("xkbcommon", xkbcommon);
@@ -62,6 +63,7 @@ pub fn build(b: *std.Build) void {
     hwc_exe.root_module.addImport("wayland", wayland);
     hwc_exe.root_module.addImport("xkbcommon", xkbcommon);
     hwc_exe.root_module.addImport("wlroots", wlroots);
+    hwc_exe.root_module.addImport("libinput", libinput_bindings);
 
     hwc_exe.linkSystemLibrary("wayland-server");
     hwc_exe.linkSystemLibrary("xkbcommon");

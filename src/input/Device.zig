@@ -6,9 +6,9 @@ const assert = std.debug.assert;
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
+const libinput = @import("libinput");
 
 const hwc = @import("../hwc.zig");
-const c = @import("../c.zig");
 const util = @import("../util.zig");
 
 const server = &@import("root").server;
@@ -34,9 +34,12 @@ pub fn init(self: *hwc.input.Device, wlr_input_device: *wlr.InputDevice) !void {
             var vendor: c_uint = 0;
             var product: c_uint = 0;
 
-            if (wlr_input_device.getLibinputDevice()) |libinput_device| {
-                vendor = c.libinput_device_get_id_vendor(@ptrCast(libinput_device));
-                product = c.libinput_device_get_id_product(@ptrCast(libinput_device));
+            if (@as(
+                ?*libinput.Device,
+                @alignCast(@ptrCast(wlr_input_device.getLibinputDevice())),
+            )) |libinput_device| {
+                vendor = libinput_device.getVendorId();
+                product = libinput_device.getProductId();
             }
 
             const id = try std.fmt.allocPrint(util.allocator, "{s}-{}-{}-{s}", .{
