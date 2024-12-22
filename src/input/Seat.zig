@@ -170,8 +170,8 @@ pub fn updateCapabilities(self: *hwc.input.Seat) void {
             .keyboard => capabilities.keyboard = true,
             .pointer => capabilities.pointer = true,
             .touch => capabilities.touch = true,
-            .tablet => {},
-            .@"switch", .tablet_pad => unreachable,
+            .tablet_pad, .tablet => {},
+            .@"switch" => unreachable,
         }
     }
 

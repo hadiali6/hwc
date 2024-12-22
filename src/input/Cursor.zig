@@ -548,10 +548,9 @@ fn handleTabletToolAxis(
     const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
     const tool = hwc.input.Tablet.Tool.get(
         server.input_manager.seat.wlr_seat,
+        tablet,
         event.tool,
     ) catch return;
-
-    log.debug("axis", .{});
 
     tool.axis(tablet, event);
 }
@@ -564,10 +563,9 @@ fn handleTabletToolProximity(
     const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
     const tool = hwc.input.Tablet.Tool.get(
         server.input_manager.seat.wlr_seat,
+        tablet,
         event.tool,
     ) catch return;
-
-    log.debug("proximity", .{});
 
     tool.proximity(tablet, event);
 }
@@ -579,10 +577,9 @@ fn handleTabletToolTip(
     const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
     const tool = hwc.input.Tablet.Tool.get(
         server.input_manager.seat.wlr_seat,
+        tablet,
         event.tool,
     ) catch return;
-
-    log.debug("tip", .{});
 
     tool.tip(tablet, event);
 }
@@ -594,10 +591,9 @@ fn handleTabletToolButton(
     const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
     const tool = hwc.input.Tablet.Tool.get(
         server.input_manager.seat.wlr_seat,
+        tablet,
         event.tool,
     ) catch return;
-
-    log.debug("button", .{});
 
     tool.button(tablet, event);
 }

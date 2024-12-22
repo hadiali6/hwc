@@ -212,6 +212,21 @@ pub fn focusToplevel(
         wlr_keyboard.keycodes[0..wlr_keyboard.num_keycodes],
         &wlr_keyboard.modifiers,
     );
+
+    {
+        var iterator = self.input_manager.devices.iterator(.forward);
+        while (iterator.next()) |input_device| {
+            const wlr_input_device = input_device.wlr_input_device;
+
+            if (wlr_input_device.type == .tablet_pad) {
+                const wlr_tablet_pad = wlr_input_device.toTabletPad();
+
+                if (@as(?*hwc.input.Tablet.Pad, @alignCast(@ptrCast(wlr_tablet_pad.data)))) |tablet_pad| {
+                    tablet_pad.setFocusedSurface(surface);
+                }
+            }
+        }
+    }
 }
 
 fn handleNewOutput(

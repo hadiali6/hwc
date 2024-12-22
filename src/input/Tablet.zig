@@ -6,6 +6,7 @@ const math = std.math;
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
+const libinput = @import("libinput");
 
 const hwc = @import("../hwc.zig");
 const util = @import("../util.zig");
@@ -49,6 +50,7 @@ pub const Tool = struct {
     };
 
     wp_tool: *wlr.TabletV2TabletTool,
+    tablet: *hwc.input.Tablet,
     tilt_x: f64 = 0,
     tilt_y: f64 = 0,
     mode: Mode = .passthrough,
@@ -57,15 +59,23 @@ pub const Tool = struct {
         wl.Listener(*wlr.TabletV2TabletTool.event.SetCursor).init(handleSetCursor),
     destroy: wl.Listener(*wlr.TabletTool) = wl.Listener(*wlr.TabletTool).init(handleDestroy),
 
-    pub fn get(wlr_seat: *wlr.Seat, wlr_tablet_tool: *wlr.TabletTool) !*Tool {
+    pub fn get(
+        wlr_seat: *wlr.Seat,
+        tablet: *hwc.input.Tablet,
+        wlr_tablet_tool: *wlr.TabletTool,
+    ) !*Tool {
         if (@as(?*Tool, @ptrFromInt(wlr_tablet_tool.data))) |tool| {
             return tool;
         } else {
-            return create(wlr_seat, wlr_tablet_tool);
+            return create(wlr_seat, tablet, wlr_tablet_tool);
         }
     }
 
-    fn create(wlr_seat: *wlr.Seat, wlr_tablet_tool: *wlr.TabletTool) !*Tool {
+    fn create(
+        wlr_seat: *wlr.Seat,
+        tablet: *hwc.input.Tablet,
+        wlr_tablet_tool: *wlr.TabletTool,
+    ) !*Tool {
         const tool = try util.allocator.create(Tool);
         errdefer util.allocator.destroy(tool);
 
@@ -74,6 +84,7 @@ pub const Tool = struct {
                 wlr_seat,
                 wlr_tablet_tool,
             ),
+            .tablet = tablet,
         };
 
         wlr_tablet_tool.data = @intFromPtr(tool);
@@ -252,5 +263,132 @@ pub const Tool = struct {
         }
 
         self.wp_tool.notifyProximityOut();
+    }
+};
+
+pub const Pad = struct {
+    device: hwc.input.Device,
+    tablet: ?*hwc.input.Tablet = null,
+    wlr_tablet_pad: *wlr.TabletPad,
+    wp_tablet_pad: *wlr.TabletV2TabletPad,
+    focused_surface: ?*wlr.Surface = null,
+
+    attach: wl.Listener(*wlr.TabletTool) =
+        wl.Listener(*wlr.TabletTool).init(handleAttach),
+    button: wl.Listener(*wlr.TabletPad.event.Button) =
+        wl.Listener(*wlr.TabletPad.event.Button).init(handleButton),
+    ring: wl.Listener(*wlr.TabletPad.event.Ring) =
+        wl.Listener(*wlr.TabletPad.event.Ring).init(handleRing),
+    strip: wl.Listener(*wlr.TabletPad.event.Strip) =
+        wl.Listener(*wlr.TabletPad.event.Strip).init(handleStrip),
+    surface_destroy: wl.Listener(*wlr.Surface) =
+        wl.Listener(*wlr.Surface).init(handleSurfaceDestroy),
+
+    pub fn init(self: *Pad, wlr_input_device: *wlr.InputDevice) !void {
+        const input_manager = server.input_manager;
+
+        self.* = .{
+            .device = undefined,
+            .wlr_tablet_pad = wlr_input_device.toTabletPad(),
+            .wp_tablet_pad = try input_manager.tablet_manager.createTabletV2TabletPad(
+                input_manager.seat.wlr_seat,
+                wlr_input_device,
+            ),
+        };
+
+        self.wlr_tablet_pad.data = self;
+        self.wlr_tablet_pad.events.attach_tablet.add(&self.attach);
+        self.wlr_tablet_pad.events.button.add(&self.button);
+        self.wlr_tablet_pad.events.ring.add(&self.ring);
+        self.wlr_tablet_pad.events.strip.add(&self.strip);
+
+        log.debug("tablet pad capabilities: {} button(s) {} strip(s) {} ring(s)", .{
+            self.wlr_tablet_pad.button_count,
+            self.wlr_tablet_pad.ring_count,
+            self.wlr_tablet_pad.strip_count,
+        });
+
+        try self.device.init(wlr_input_device);
+        errdefer self.device.deinit();
+    }
+
+    pub fn deinit(self: *Pad) void {
+        self.attach.link.remove();
+        self.button.link.remove();
+        self.ring.link.remove();
+        self.strip.link.remove();
+
+        self.device.deinit();
+        util.allocator.destroy(self);
+    }
+
+    pub fn setFocusedSurface(self: *Pad, new_wlr_surface: *wlr.Surface) void {
+        if (self.tablet == null) {
+            return;
+        }
+
+        if (self.focused_surface) |current_wlr_surface| {
+            _ = self.wp_tablet_pad.notifyLeave(current_wlr_surface);
+            self.surface_destroy.link.remove();
+        }
+
+        self.focused_surface = new_wlr_surface;
+        _ = self.wp_tablet_pad.notifyEnter(self.tablet.?.wp_tablet, new_wlr_surface);
+        new_wlr_surface.events.destroy.add(&self.surface_destroy);
+    }
+
+    fn handleAttach(
+        listener: *wl.Listener(*wlr.TabletTool),
+        wlr_tablet_tool: *wlr.TabletTool,
+    ) void {
+        const pad: *Pad = @fieldParentPtr("attach", listener);
+
+        if (@as(?*Tool, @ptrFromInt(wlr_tablet_tool.data))) |tool| {
+            pad.tablet = tool.tablet;
+        }
+    }
+
+    fn handleButton(
+        listener: *wl.Listener(*wlr.TabletPad.event.Button),
+        event: *wlr.TabletPad.event.Button,
+    ) void {
+        const pad: *Pad = @fieldParentPtr("button", listener);
+
+        _ = pad.wp_tablet_pad.notifyButton(event.button, event.time_msec, event.state);
+    }
+
+    fn handleRing(
+        listener: *wl.Listener(*wlr.TabletPad.event.Ring),
+        event: *wlr.TabletPad.event.Ring,
+    ) void {
+        const pad: *Pad = @fieldParentPtr("ring", listener);
+
+        _ = pad.wp_tablet_pad.notifyRing(
+            event.ring,
+            event.position,
+            event.source == .finger,
+            event.time_msec,
+        );
+    }
+
+    fn handleStrip(
+        listener: *wl.Listener(*wlr.TabletPad.event.Strip),
+        event: *wlr.TabletPad.event.Strip,
+    ) void {
+        const pad: *Pad = @fieldParentPtr("strip", listener);
+
+        _ = pad.wp_tablet_pad.notifyStrip(
+            event.strip,
+            event.position,
+            event.source == .finger,
+            event.time_msec,
+        );
+    }
+
+    fn handleSurfaceDestroy(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
+        const pad: *Pad = @fieldParentPtr("surface_destroy", listener);
+
+        pad.focused_surface = null;
+        pad.surface_destroy.link.remove();
     }
 };

@@ -103,7 +103,11 @@ fn handleDestroy(
             const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
             tablet.deinit();
         },
-        .tablet_pad, .@"switch" => unreachable,
+        .tablet_pad => {
+            const tablet_pad: *hwc.input.Tablet.Pad = @fieldParentPtr("device", device);
+            tablet_pad.deinit();
+        },
+        .@"switch" => unreachable,
     }
 }
 
