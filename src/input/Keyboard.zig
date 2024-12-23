@@ -113,13 +113,20 @@ fn handleKey(
 
     const keysyms = xkb_state.keyGetSyms(keycode);
 
-    for (keysyms) |sym| {
-        if (!(event.state == .released) and ttyKeybinds(sym)) {
-            return;
+    const ignore_binds = if (server.focused) |focused_toplevel|
+        focused_toplevel.keyboard_shortcuts_inhibit
+    else
+        false;
+
+    if (!ignore_binds) {
+        for (keysyms) |sym| {
+            if (!(event.state == .released) and ttyKeybinds(sym)) {
+                return;
+            }
         }
     }
 
-    const keybind_was_run = if (event.state == .pressed) seat.handleKeybind(
+    const keybind_was_run = if (event.state == .pressed and !ignore_binds) seat.handleKeybind(
         keycode,
         modifiers,
         event.state == .released,
@@ -135,7 +142,7 @@ fn handleKey(
         );
     }
 
-    if (event.state == .released) _ = seat.handleKeybind(
+    if (event.state == .released and !ignore_binds) _ = seat.handleKeybind(
         keycode,
         modifiers,
         event.state == .released,

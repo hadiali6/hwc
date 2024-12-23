@@ -16,6 +16,7 @@ const server = &@import("root").server;
 seat: hwc.input.Seat,
 devices: wl.list.Head(hwc.input.Device, .link),
 
+keyboard_shortcuts_inhibit_manager: *wlr.KeyboardShortcutsInhibitManagerV1,
 relative_pointer_manager: *wlr.RelativePointerManagerV1,
 virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
 virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
@@ -28,6 +29,8 @@ tablet_manager: *wlr.TabletManagerV2,
 
 new_input: wl.Listener(*wlr.InputDevice) =
     wl.Listener(*wlr.InputDevice).init(handleNewInput),
+new_keyboard_shortcuts_inhibitor: wl.Listener(*wlr.KeyboardShortcutsInhibitorV1) =
+    wl.Listener(*wlr.KeyboardShortcutsInhibitorV1).init(handleNewKeyboardShortcutsInhibitor),
 new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) =
     wl.Listener(*wlr.VirtualKeyboardV1).init(handleNewVirtualKeyboard),
 new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) =
@@ -43,6 +46,8 @@ pub fn init(self: *hwc.input.Manager) !void {
     self.* = .{
         .seat = undefined,
         .devices = undefined,
+
+        .keyboard_shortcuts_inhibit_manager = try wlr.KeyboardShortcutsInhibitManagerV1.create(server.wl_server),
         .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(server.wl_server),
         .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(server.wl_server),
         .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(server.wl_server),
@@ -58,6 +63,7 @@ pub fn init(self: *hwc.input.Manager) !void {
     self.devices.init();
 
     server.backend.events.new_input.add(&self.new_input);
+    self.keyboard_shortcuts_inhibit_manager.events.new_inhibitor.add(&self.new_keyboard_shortcuts_inhibitor);
     self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
     self.virtual_pointer_manager.events.new_virtual_pointer.add(&self.new_virtual_pointer);
     self.pointer_constraints.events.new_constraint.add(&self.new_constraint);
@@ -86,6 +92,28 @@ fn handleNewInput(
         log.err("{s} failed: {}", .{ @src().fn_name, err });
         return;
     };
+}
+
+fn handleNewKeyboardShortcutsInhibitor(
+    _: *wl.Listener(*wlr.KeyboardShortcutsInhibitorV1),
+    wlr_keyboard_shortcuts_inhibitor: *wlr.KeyboardShortcutsInhibitorV1,
+) void {
+    hwc.input.KeyboardShortcutsInhibitor.create(wlr_keyboard_shortcuts_inhibitor) catch |err| {
+        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        return;
+    };
+
+    wlr_keyboard_shortcuts_inhibitor.activate();
+
+    const scene_node: ?*wlr.SceneNode = @ptrFromInt(wlr_keyboard_shortcuts_inhibitor.surface.data);
+    const toplevel: ?*hwc.XdgToplevel = if (scene_node != null)
+        @ptrFromInt(scene_node.?.data)
+    else
+        null;
+
+    if (scene_node != null and toplevel != null) {
+        toplevel.?.keyboard_shortcuts_inhibit = true;
+    }
 }
 
 fn handleNewVirtualKeyboard(

@@ -16,6 +16,7 @@ scene_tree: *wlr.SceneTree,
 geometry: wlr.Box = undefined,
 previous_geometry: wlr.Box = undefined,
 decoration: ?hwc.XdgDecoration = null,
+keyboard_shortcuts_inhibit: bool = false,
 
 commit: wl.Listener(*wlr.Surface) =
     wl.Listener(*wlr.Surface).init(handleCommit),

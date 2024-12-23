@@ -11,6 +11,7 @@ pub const input = struct {
     pub const Device = @import("input/Device.zig");
     pub const Keybind = @import("input/Keybind.zig");
     pub const Keyboard = @import("input/Keyboard.zig");
+    pub const KeyboardShortcutsInhibitor = @import("input/KeyboardShortcutsInhibitor.zig");
     pub const Manager = @import("input/Manager.zig");
     pub const PointerConstraint = @import("input/PointerConstraint.zig");
     pub const Relay = @import("input/Relay.zig");
