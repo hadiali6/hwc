@@ -185,7 +185,7 @@ pub fn focusToplevel(
     toplevel: *hwc.XdgToplevel,
     surface: *wlr.Surface,
 ) void {
-    const wlr_seat = self.input_manager.seat.wlr_seat;
+    const wlr_seat = self.input_manager.defaultSeat().wlr_seat;
     self.focused = toplevel;
 
     if (wlr_seat.keyboard_state.focused_surface) |previous_surface| {

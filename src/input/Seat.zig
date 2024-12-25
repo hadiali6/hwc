@@ -21,12 +21,14 @@ keybind_repeat_timer: *wl.EventSource,
 /// Currently repeating mapping, if any
 repeating_keybind: ?*const hwc.input.Keybind = null,
 
+link: wl.list.Link,
+
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) =
     wl.Listener(*wlr.Seat.event.RequestSetCursor).init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) =
     wl.Listener(*wlr.Seat.event.RequestSetSelection).init(handleRequestSetSelection),
 
-pub fn init(self: *hwc.input.Seat) !void {
+pub fn init(self: *hwc.input.Seat, name: [*:0]const u8) !void {
     const event_loop = server.wl_server.getEventLoop();
     const keybind_repeat_timer = try event_loop.addTimer(
         *hwc.input.Seat,
@@ -34,12 +36,14 @@ pub fn init(self: *hwc.input.Seat) !void {
         self,
     );
     errdefer keybind_repeat_timer.remove();
+    _ = name;
 
     self.* = .{
         .keybind_repeat_timer = keybind_repeat_timer,
-        .wlr_seat = try wlr.Seat.create(server.wl_server, "seat0"),
+        .wlr_seat = try wlr.Seat.create(server.wl_server, "default"),
         .cursor = undefined,
         .relay = undefined,
+        .link = undefined,
     };
 
     self.wlr_seat.data = @intFromPtr(self);
@@ -54,6 +58,8 @@ pub fn init(self: *hwc.input.Seat) !void {
 pub fn deinit(self: *hwc.input.Seat) void {
     self.keybind_repeat_timer.remove();
     self.cursor.deinit();
+    self.link.remove();
+    util.allocator.destroy(self);
 }
 
 fn handleRequestSetCursor(

@@ -273,7 +273,7 @@ fn addKeybind(lua: *Lua) i32 {
         // Repeating mappings borrow the Mapping directly. To prevent a possible
         // crash if the Mapping ArrayList is reallocated, stop any currently
         // repeating mappings.
-        server.input_manager.seat.clearRepeatingMapping();
+        server.input_manager.defaultSeat().clearRepeatingMapping();
         server.config.keybinds.append(util.allocator, keybind) catch {
             lua.raiseErrorStr("allocation failed", .{});
             return 0;

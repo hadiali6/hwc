@@ -13,7 +13,7 @@ const util = @import("../util.zig");
 
 const server = &@import("root").server;
 
-seat: hwc.input.Seat,
+seats: wl.list.Head(hwc.input.Seat, .link),
 devices: wl.list.Head(hwc.input.Device, .link),
 
 keyboard_shortcuts_inhibit_manager: *wlr.KeyboardShortcutsInhibitManagerV1,
@@ -26,6 +26,7 @@ idle_notifier: *wlr.IdleNotifierV1,
 input_method_manager: *wlr.InputMethodManagerV2,
 text_input_manager: *wlr.TextInputManagerV3,
 tablet_manager: *wlr.TabletManagerV2,
+transient_seat_manager: *wlr.TransientSeatManagerV1,
 
 new_input: wl.Listener(*wlr.InputDevice) =
     wl.Listener(*wlr.InputDevice).init(handleNewInput),
@@ -41,10 +42,12 @@ new_input_method: wl.Listener(*wlr.InputMethodV2) =
     wl.Listener(*wlr.InputMethodV2).init(handleNewInputMethod),
 new_text_input: wl.Listener(*wlr.TextInputV3) =
     wl.Listener(*wlr.TextInputV3).init(handleNewTextInput),
+new_transient_seat: wl.Listener(*wlr.TransientSeatV1) =
+    wl.Listener(*wlr.TransientSeatV1).init(handleNewTransientSeat),
 
 pub fn init(self: *hwc.input.Manager) !void {
     self.* = .{
-        .seat = undefined,
+        .seats = undefined,
         .devices = undefined,
 
         .keyboard_shortcuts_inhibit_manager = try wlr.KeyboardShortcutsInhibitManagerV1.create(server.wl_server),
@@ -57,16 +60,24 @@ pub fn init(self: *hwc.input.Manager) !void {
         .input_method_manager = try wlr.InputMethodManagerV2.create(server.wl_server),
         .text_input_manager = try wlr.TextInputManagerV3.create(server.wl_server),
         .tablet_manager = try wlr.TabletManagerV2.create(server.wl_server),
+        .transient_seat_manager = try wlr.TransientSeatManagerV1.create(server.wl_server),
     };
 
-    try self.seat.init();
     self.devices.init();
+    self.seats.init();
+
+    {
+        const seat = try util.allocator.create(hwc.input.Seat);
+        try seat.init("default");
+        self.seats.append(seat);
+    }
 
     server.backend.events.new_input.add(&self.new_input);
     self.keyboard_shortcuts_inhibit_manager.events.new_inhibitor.add(&self.new_keyboard_shortcuts_inhibitor);
     self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
     self.virtual_pointer_manager.events.new_virtual_pointer.add(&self.new_virtual_pointer);
     self.pointer_constraints.events.new_constraint.add(&self.new_constraint);
+    self.transient_seat_manager.events.create_seat.add(&self.new_transient_seat);
 }
 
 pub fn deinit(self: *hwc.input.Manager) void {
@@ -76,11 +87,19 @@ pub fn deinit(self: *hwc.input.Manager) void {
     self.new_constraint.link.remove();
 
     assert(self.devices.empty());
-    self.seat.deinit();
+
+    while (self.seats.first()) |seat| {
+        seat.deinit();
+    }
+}
+
+pub fn defaultSeat(self: *hwc.input.Manager) *hwc.input.Seat {
+    // first seat is always the default one
+    return self.seats.first().?;
 }
 
 pub fn handleActivity(self: *hwc.input.Manager) void {
-    self.idle_notifier.notifyActivity(self.seat.wlr_seat);
+    self.idle_notifier.notifyActivity(self.defaultSeat().wlr_seat);
 }
 
 fn handleNewInput(
@@ -163,7 +182,7 @@ fn handleNewInputMethod(
     wlr_input_method: *wlr.InputMethodV2,
 ) void {
     const input_manager: *hwc.input.Manager = @fieldParentPtr("new_input_method", listener);
-    input_manager.seat.relay.newInputMethod(wlr_input_method);
+    input_manager.defaultSeat().relay.newInputMethod(wlr_input_method);
 }
 
 fn handleNewTextInput(
@@ -171,11 +190,48 @@ fn handleNewTextInput(
     wlr_text_input: *wlr.TextInputV3,
 ) void {
     const input_manager: *hwc.input.Manager = @fieldParentPtr("new_text_input", listener);
-    input_manager.seat.relay.newTextInput(wlr_text_input) catch {
+    input_manager.defaultSeat().relay.newTextInput(wlr_text_input) catch {
         log.err("out of memory", .{});
         wlr_text_input.resource.postNoMemory();
         return;
     };
+}
+
+fn handleNewTransientSeat(
+    listener: *wl.Listener(*wlr.TransientSeatV1),
+    wlr_transient_seat: *wlr.TransientSeatV1,
+) void {
+    const state = struct {
+        var counter: u64 = 0;
+    };
+
+    const input_manager: *hwc.input.Manager = @fieldParentPtr("new_transient_seat", listener);
+
+    const seat = util.allocator.create(hwc.input.Seat) catch |err| {
+        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        wlr_transient_seat.deny();
+        return;
+    };
+
+    seat.init(blk: {
+        var buffer = [_]u8{0} ** 256;
+        const name = std.fmt.bufPrintZ(&buffer, "transient-{}", .{state.counter}) catch |err| {
+            log.err("{s} failed: {}", .{ @src().fn_name, err });
+            wlr_transient_seat.deny();
+            return;
+        };
+
+        break :blk name;
+    }) catch |err| {
+        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        wlr_transient_seat.deny();
+        return;
+    };
+
+    input_manager.seats.append(seat);
+    state.counter += 1;
+
+    wlr_transient_seat.ready(seat.wlr_seat);
 }
 
 fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void {
@@ -186,7 +242,7 @@ fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void
             try keyboard.init(wlr_input_device);
             errdefer keyboard.deinit();
 
-            const seat = &server.input_manager.seat;
+            const seat = self.defaultSeat();
             seat.wlr_seat.setKeyboard(keyboard.device.wlr_input_device.toKeyboard());
             if (seat.wlr_seat.keyboard_state.focused_surface) |wlr_surface| {
                 seat.keyboardNotifyEnter(wlr_surface);
@@ -200,7 +256,7 @@ fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void
             }
 
             try device.init(wlr_input_device);
-            self.seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
+            self.defaultSeat().cursor.wlr_cursor.attachInputDevice(wlr_input_device);
         },
         .tablet => {
             const tablet = try util.allocator.create(hwc.input.Tablet);
@@ -208,7 +264,7 @@ fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void
             try tablet.init(wlr_input_device);
             errdefer tablet.deinit();
 
-            self.seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
+            self.defaultSeat().cursor.wlr_cursor.attachInputDevice(wlr_input_device);
         },
         .tablet_pad => {
             const tablet_pad = try util.allocator.create(hwc.input.Tablet.Pad);

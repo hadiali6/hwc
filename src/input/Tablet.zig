@@ -17,12 +17,10 @@ device: hwc.input.Device,
 wp_tablet: *wlr.TabletV2Tablet,
 
 pub fn init(self: *hwc.input.Tablet, wlr_input_device: *wlr.InputDevice) !void {
-    const input_manager = server.input_manager;
-
     self.* = .{
         .device = undefined,
-        .wp_tablet = try input_manager.tablet_manager.createTabletV2Tablet(
-            input_manager.seat.wlr_seat,
+        .wp_tablet = try server.input_manager.tablet_manager.createTabletV2Tablet(
+            server.input_manager.defaultSeat().wlr_seat,
             wlr_input_device,
         ),
     };
@@ -99,9 +97,7 @@ pub const Tool = struct {
         _: *wl.Listener(*wlr.TabletV2TabletTool.event.SetCursor),
         event: *wlr.TabletV2TabletTool.event.SetCursor,
     ) void {
-        log.debug("set_cursor", .{});
-
-        const seat = &server.input_manager.seat;
+        const seat = server.input_manager.defaultSeat();
 
         if (seat.cursor.mode != .passthrough) {
             return;
@@ -128,7 +124,7 @@ pub const Tool = struct {
     }
 
     pub fn axis(self: *Tool, tablet: *hwc.input.Tablet, event: *wlr.Tablet.event.Axis) void {
-        const wlr_cursor = server.input_manager.seat.cursor.wlr_cursor;
+        const wlr_cursor = server.input_manager.defaultSeat().cursor.wlr_cursor;
         wlr_cursor.attachInputDevice(tablet.device.wlr_input_device);
 
         if (event.updated_axes.x or event.updated_axes.y) {
@@ -185,14 +181,14 @@ pub const Tool = struct {
         tablet: *hwc.input.Tablet,
         event: *wlr.Tablet.event.Proximity,
     ) void {
-        const wlr_cursor = server.input_manager.seat.cursor.wlr_cursor;
+        const wlr_cursor = server.input_manager.defaultSeat().cursor.wlr_cursor;
 
         switch (event.state) {
             .out => {
                 wlr_cursor.attachInputDevice(tablet.device.wlr_input_device);
 
                 wlr_cursor.warpAbsolute(tablet.device.wlr_input_device, event.x, event.y);
-                wlr_cursor.setXcursor(server.input_manager.seat.cursor.xcursor_manager, "pencil");
+                wlr_cursor.setXcursor(server.input_manager.defaultSeat().cursor.xcursor_manager, "pencil");
 
                 self.passthrough(tablet);
             },
@@ -204,7 +200,7 @@ pub const Tool = struct {
     }
 
     pub fn tip(self: *Tool, tablet: *hwc.input.Tablet, event: *wlr.Tablet.event.Tip) void {
-        const wlr_cursor = server.input_manager.seat.cursor.wlr_cursor;
+        const wlr_cursor = server.input_manager.defaultSeat().cursor.wlr_cursor;
 
         switch (event.state) {
             .down => {
@@ -252,14 +248,14 @@ pub const Tool = struct {
     /// If there is no surface under the cursor or the surface under the cursor
     /// does not support the tablet v2 protocol, send a proximity_out event.
     fn passthrough(self: *Tool, tablet: *hwc.input.Tablet) void {
-        const wlr_cursor = server.input_manager.seat.cursor.wlr_cursor;
+        const wlr_cursor = server.input_manager.defaultSeat().cursor.wlr_cursor;
 
         if (server.toplevelAt(wlr_cursor.x, wlr_cursor.y)) |result| {
             self.wp_tool.notifyProximityIn(tablet.wp_tablet, result.surface);
             self.wp_tool.notifyMotion(result.sx, result.sy);
             return;
         } else {
-            wlr_cursor.setXcursor(server.input_manager.seat.cursor.xcursor_manager, "pencil");
+            wlr_cursor.setXcursor(server.input_manager.defaultSeat().cursor.xcursor_manager, "pencil");
         }
 
         self.wp_tool.notifyProximityOut();
@@ -285,13 +281,11 @@ pub const Pad = struct {
         wl.Listener(*wlr.Surface).init(handleSurfaceDestroy),
 
     pub fn init(self: *Pad, wlr_input_device: *wlr.InputDevice) !void {
-        const input_manager = server.input_manager;
-
         self.* = .{
             .device = undefined,
             .wlr_tablet_pad = wlr_input_device.toTabletPad(),
-            .wp_tablet_pad = try input_manager.tablet_manager.createTabletV2TabletPad(
-                input_manager.seat.wlr_seat,
+            .wp_tablet_pad = try server.input_manager.tablet_manager.createTabletV2TabletPad(
+                server.input_manager.defaultSeat().wlr_seat,
                 wlr_input_device,
             ),
         };

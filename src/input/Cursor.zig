@@ -150,7 +150,7 @@ fn handleAxis(
     event: *wlr.Pointer.event.Axis,
 ) void {
     server.input_manager.handleActivity();
-    server.input_manager.seat.wlr_seat.pointerNotifyAxis(
+    server.input_manager.defaultSeat().wlr_seat.pointerNotifyAxis(
         event.time_msec,
         event.orientation,
         event.delta,
@@ -167,7 +167,7 @@ fn handleButton(
     const cursor: *hwc.input.Cursor = @fieldParentPtr("button", listener);
 
     server.input_manager.handleActivity();
-    _ = server.input_manager.seat.wlr_seat.pointerNotifyButton(
+    _ = server.input_manager.defaultSeat().wlr_seat.pointerNotifyButton(
         event.time_msec,
         event.button,
         event.state,
@@ -184,7 +184,7 @@ fn handleButton(
 }
 
 fn handleFrame(_: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
-    server.input_manager.seat.wlr_seat.pointerNotifyFrame();
+    server.input_manager.defaultSeat().wlr_seat.pointerNotifyFrame();
 }
 
 fn handleMotion(
@@ -260,7 +260,7 @@ fn sendRelativeMotion(
     unaccel_dy: f64,
 ) void {
     server.input_manager.relative_pointer_manager.sendRelativeMotion(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         @as(u64, time_msec) * 1000,
         dx,
         dy,
@@ -292,7 +292,7 @@ fn processMotion(
 }
 
 fn passthrough(self: *hwc.input.Cursor, time_msec: u32) void {
-    const wlr_seat = server.input_manager.seat.wlr_seat;
+    const wlr_seat = server.input_manager.defaultSeat().wlr_seat;
 
     if (server.toplevelAt(self.wlr_cursor.x, self.wlr_cursor.y)) |result| {
         wlr_seat.pointerNotifyEnter(result.surface, result.sx, result.sy);
@@ -385,7 +385,7 @@ fn handlePinchBegin(
     event: *wlr.Pointer.event.PinchBegin,
 ) void {
     server.input_manager.pointer_gestures.sendPinchBegin(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         event.time_msec,
         event.fingers,
     );
@@ -396,7 +396,7 @@ fn handlePinchUpdate(
     event: *wlr.Pointer.event.PinchUpdate,
 ) void {
     server.input_manager.pointer_gestures.sendPinchUpdate(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         event.time_msec,
         event.dx,
         event.dy,
@@ -410,7 +410,7 @@ fn handlePinchEnd(
     event: *wlr.Pointer.event.PinchEnd,
 ) void {
     server.input_manager.pointer_gestures.sendPinchEnd(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         event.time_msec,
         event.cancelled,
     );
@@ -421,7 +421,7 @@ fn handleSwipeBegin(
     event: *wlr.Pointer.event.SwipeBegin,
 ) void {
     server.input_manager.pointer_gestures.sendSwipeBegin(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         event.time_msec,
         event.fingers,
     );
@@ -432,7 +432,7 @@ fn handleSwipeUpdate(
     event: *wlr.Pointer.event.SwipeUpdate,
 ) void {
     server.input_manager.pointer_gestures.sendSwipeUpdate(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         event.time_msec,
         event.dx,
         event.dy,
@@ -444,7 +444,7 @@ fn handleSwipeEnd(
     event: *wlr.Pointer.event.SwipeEnd,
 ) void {
     server.input_manager.pointer_gestures.sendPinchEnd(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         event.time_msec,
         event.cancelled,
     );
@@ -455,7 +455,7 @@ fn handleHoldBegin(
     event: *wlr.Pointer.event.HoldBegin,
 ) void {
     server.input_manager.pointer_gestures.sendHoldBegin(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         event.time_msec,
         event.fingers,
     );
@@ -466,7 +466,7 @@ fn handleHoldEnd(
     event: *wlr.Pointer.event.HoldEnd,
 ) void {
     server.input_manager.pointer_gestures.sendHoldEnd(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         event.time_msec,
         event.cancelled,
     );
@@ -478,7 +478,7 @@ fn handleTouchUp(listener: *wl.Listener(*wlr.Touch.event.Up), event: *wlr.Touch.
     server.input_manager.handleActivity();
 
     if (cursor.touch_points.remove(event.touch_id)) {
-        _ = server.input_manager.seat.wlr_seat.touchNotifyUp(event.time_msec, event.touch_id);
+        _ = server.input_manager.defaultSeat().wlr_seat.touchNotifyUp(event.time_msec, event.touch_id);
     }
 }
 
@@ -499,7 +499,7 @@ fn handleTouchDown(listener: *wl.Listener(*wlr.Touch.event.Down), event: *wlr.To
     if (server.toplevelAt(lx, ly)) |result| {
         server.focusToplevel(result.toplevel, result.surface);
 
-        _ = server.input_manager.seat.wlr_seat.touchNotifyDown(
+        _ = server.input_manager.defaultSeat().wlr_seat.touchNotifyDown(
             result.surface,
             event.time_msec,
             event.touch_id,
@@ -524,7 +524,7 @@ fn handleTouchMotion(listener: *wl.Listener(*wlr.Touch.event.Motion), event: *wl
         );
 
         if (server.toplevelAt(point.lx, point.ly)) |result| {
-            server.input_manager.seat.wlr_seat.touchNotifyMotion(
+            server.input_manager.defaultSeat().wlr_seat.touchNotifyMotion(
                 event.time_msec,
                 event.touch_id,
                 result.sx,
@@ -539,7 +539,7 @@ fn handleTouchCancel(
     _: *wlr.Touch.event.Cancel,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_cancel", listener);
-    const wlr_seat = server.input_manager.seat.wlr_seat;
+    const wlr_seat = server.input_manager.defaultSeat().wlr_seat;
 
     server.input_manager.handleActivity();
 
@@ -552,7 +552,7 @@ fn handleTouchCancel(
 
 fn handleTouchFrame(_: *wl.Listener(void)) void {
     server.input_manager.handleActivity();
-    server.input_manager.seat.wlr_seat.touchNotifyFrame();
+    server.input_manager.defaultSeat().wlr_seat.touchNotifyFrame();
 }
 
 fn handleTabletToolAxis(
@@ -565,7 +565,7 @@ fn handleTabletToolAxis(
     server.input_manager.handleActivity();
 
     const tool = hwc.input.Tablet.Tool.get(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         tablet,
         event.tool,
     ) catch return;
@@ -583,7 +583,7 @@ fn handleTabletToolProximity(
     server.input_manager.handleActivity();
 
     const tool = hwc.input.Tablet.Tool.get(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         tablet,
         event.tool,
     ) catch return;
@@ -600,7 +600,7 @@ fn handleTabletToolTip(
     server.input_manager.handleActivity();
 
     const tool = hwc.input.Tablet.Tool.get(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         tablet,
         event.tool,
     ) catch return;
@@ -617,7 +617,7 @@ fn handleTabletToolButton(
     server.input_manager.handleActivity();
 
     const tool = hwc.input.Tablet.Tool.get(
-        server.input_manager.seat.wlr_seat,
+        server.input_manager.defaultSeat().wlr_seat,
         tablet,
         event.tool,
     ) catch return;

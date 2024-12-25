@@ -68,7 +68,19 @@ pub fn init(self: *hwc.input.Device, wlr_input_device: *wlr.InputDevice) !void {
 
     if (!isKeyboardGroup(self.wlr_input_device)) {
         server.input_manager.devices.append(self);
-        server.input_manager.seat.updateCapabilities();
+        var capabilities = wl.Seat.Capability{};
+
+        var iterator = server.input_manager.devices.iterator(.forward);
+        while (iterator.next()) |device| {
+            switch (device.wlr_input_device.type) {
+                .keyboard => capabilities.keyboard = true,
+                .pointer => capabilities.pointer = true,
+                .touch => capabilities.touch = true,
+                .tablet_pad, .tablet, .@"switch" => {},
+            }
+        }
+
+        server.input_manager.defaultSeat().wlr_seat.setCapabilities(capabilities);
     }
 }
 

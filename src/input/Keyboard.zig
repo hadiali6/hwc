@@ -52,7 +52,7 @@ pub fn deinit(self: *hwc.input.Keyboard) void {
     self.key.link.remove();
     self.modifiers.link.remove();
 
-    const seat = server.input_manager.seat;
+    const seat = server.input_manager.defaultSeat();
     const wlr_keyboard = self.device.wlr_input_device.toKeyboard();
 
     self.device.deinit();
@@ -79,7 +79,7 @@ fn handleModifiers(
     _: *wl.Listener(*wlr.Keyboard),
     wlr_keyboard: *wlr.Keyboard,
 ) void {
-    const wlr_seat = server.input_manager.seat.wlr_seat;
+    const wlr_seat = server.input_manager.defaultSeat().wlr_seat;
     wlr_seat.setKeyboard(wlr_keyboard);
     wlr_seat.keyboardNotifyModifiers(&wlr_keyboard.modifiers);
 }
@@ -95,7 +95,7 @@ fn handleKey(
     var device = &keyboard.device;
     const wlr_keyboard = device.wlr_input_device.toKeyboard();
 
-    var seat = &server.input_manager.seat;
+    var seat = server.input_manager.defaultSeat();
 
     // If the keyboard is in a group, this event will be handled by the group's Keyboard instance.
     if (wlr_keyboard.group != null) return;
