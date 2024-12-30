@@ -17,6 +17,7 @@ allocator: *wlr.Allocator,
 compositor: *wlr.Compositor,
 subcompositor: *wlr.Subcompositor,
 scene: *wlr.Scene,
+hidden: *wlr.SceneTree,
 
 renderer_lost: wl.Listener(void) = wl.Listener(void).init(handleRendererLost),
 
@@ -35,28 +36,15 @@ new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) =
     wl.Listener(*wlr.XdgToplevel).init(handleNewXdgToplevel),
 mapped_toplevels: wl.list.Head(hwc.XdgToplevel, .link),
 
-seat: *wlr.Seat,
-new_input: wl.Listener(*wlr.InputDevice) =
-    wl.Listener(*wlr.InputDevice).init(handleNewInput),
-request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) =
-    wl.Listener(*wlr.Seat.event.RequestSetCursor).init(handleRequestSetCursor),
-request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) =
-    wl.Listener(*wlr.Seat.event.RequestSetSelection).init(handleRequestSetSelection),
-keyboards: wl.list.Head(hwc.Keyboard, .link) = undefined,
+focused: ?*hwc.XdgToplevel = null,
 
 xdg_decoration_manager: *wlr.XdgDecorationManagerV1,
 new_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) =
     wl.Listener(*wlr.XdgToplevelDecorationV1).init(handleNewToplevelDecoration),
 
 config: hwc.Config,
-cursor: hwc.Cursor,
 output_manager: hwc.OutputManager,
-
-/// Timer for repeating keyboard mappings
-keybind_repeat_timer: *wl.EventSource,
-
-/// Currently repeating mapping, if any
-repeating_keybind: ?*const hwc.Keybind = null,
+input_manager: hwc.input.Manager,
 
 security_context_manager: *wlr.SecurityContextManagerV1,
 single_pixel_buffer_manager: *wlr.SinglePixelBufferManagerV1,
@@ -78,9 +66,8 @@ pub fn init(self: *hwc.Server) !void {
     const renderer = try wlr.Renderer.autocreate(backend);
     const output_layout = try wlr.OutputLayout.create(wl_server);
     const scene = try wlr.Scene.create();
-
-    const keybind_repeat_timer = try event_loop.addTimer(*hwc.Server, handleMappingRepeatTimeout, self);
-    errdefer keybind_repeat_timer.remove();
+    const hidden_scene_tree = try scene.tree.createSceneTree();
+    hidden_scene_tree.node.setEnabled(false);
 
     self.* = .{
         .wl_server = wl_server,
@@ -98,11 +85,9 @@ pub fn init(self: *hwc.Server) !void {
         .all_outputs = undefined,
         .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
         .mapped_toplevels = undefined,
-        .seat = try wlr.Seat.create(wl_server, "default"),
-        .cursor = undefined,
         .xdg_decoration_manager = try wlr.XdgDecorationManagerV1.create(wl_server),
         .config = undefined,
-        .keybind_repeat_timer = keybind_repeat_timer,
+        .input_manager = undefined,
         .security_context_manager = try wlr.SecurityContextManagerV1.create(wl_server),
         .single_pixel_buffer_manager = try wlr.SinglePixelBufferManagerV1.create(wl_server),
         .viewporter = try wlr.Viewporter.create(wl_server),
@@ -114,6 +99,7 @@ pub fn init(self: *hwc.Server) !void {
         .screencopy_manager = try wlr.ScreencopyManagerV1.create(wl_server),
         .xdg_output_manager = try wlr.XdgOutputManagerV1.create(wl_server, output_layout),
         .presentation = try wlr.Presentation.create(wl_server, backend),
+        .hidden = hidden_scene_tree,
     };
 
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
@@ -131,18 +117,12 @@ pub fn init(self: *hwc.Server) !void {
 
     self.xdg_decoration_manager.events.new_toplevel_decoration.add(&self.new_toplevel_decoration);
 
-    self.backend.events.new_input.add(&self.new_input);
-    self.seat.events.request_set_cursor.add(&self.request_set_cursor);
-    self.seat.events.request_set_selection.add(&self.request_set_selection);
-    self.keyboards.init();
-
     try self.config.init();
-    try self.cursor.init();
     try self.output_manager.init();
+    try self.input_manager.init();
 }
 
 pub fn deinit(self: *hwc.Server) void {
-    self.keybind_repeat_timer.remove();
     self.new_xdg_toplevel.link.remove();
     self.new_toplevel_decoration.link.remove();
 
@@ -153,7 +133,7 @@ pub fn deinit(self: *hwc.Server) void {
     self.renderer.destroy();
     self.allocator.destroy();
 
-    self.cursor.deinit();
+    self.input_manager.deinit();
 
     self.wl_server.destroy();
 }
@@ -171,6 +151,7 @@ pub fn start(self: *hwc.Server) !void {
 const ToplevelAtResult = struct {
     toplevel: *hwc.XdgToplevel,
     surface: *wlr.Surface,
+    node: *wlr.SceneNode,
     sx: f64,
     sy: f64,
 };
@@ -189,6 +170,7 @@ pub fn toplevelAt(self: *hwc.Server, lx: f64, ly: f64) ?ToplevelAtResult {
                 return ToplevelAtResult{
                     .toplevel = toplevel,
                     .surface = scene_surface.surface,
+                    .node = node,
                     .sx = sx,
                     .sy = sy,
                 };
@@ -203,7 +185,10 @@ pub fn focusToplevel(
     toplevel: *hwc.XdgToplevel,
     surface: *wlr.Surface,
 ) void {
-    if (self.seat.keyboard_state.focused_surface) |previous_surface| {
+    const wlr_seat = self.input_manager.defaultSeat().wlr_seat;
+    self.focused = toplevel;
+
+    if (wlr_seat.keyboard_state.focused_surface) |previous_surface| {
         if (previous_surface == surface) return;
         if (wlr.XdgSurface.tryFromWlrSurface(previous_surface)) |xdg_surface| {
             if (xdg_surface.role == .toplevel) {
@@ -221,12 +206,27 @@ pub fn focusToplevel(
 
     _ = toplevel.xdg_toplevel.setActivated(true);
 
-    const wlr_keyboard = self.seat.getKeyboard() orelse return;
-    self.seat.keyboardNotifyEnter(
+    const wlr_keyboard = wlr_seat.getKeyboard() orelse return;
+    wlr_seat.keyboardNotifyEnter(
         surface,
         wlr_keyboard.keycodes[0..wlr_keyboard.num_keycodes],
         &wlr_keyboard.modifiers,
     );
+
+    {
+        var iterator = self.input_manager.devices.iterator(.forward);
+        while (iterator.next()) |input_device| {
+            const wlr_input_device = input_device.wlr_input_device;
+
+            if (wlr_input_device.type == .tablet_pad) {
+                const wlr_tablet_pad = wlr_input_device.toTabletPad();
+
+                if (@as(?*hwc.input.Tablet.Pad, @alignCast(@ptrCast(wlr_tablet_pad.data)))) |tablet_pad| {
+                    tablet_pad.setFocusedSurface(surface);
+                }
+            }
+        }
+    }
 }
 
 fn handleNewOutput(
@@ -255,73 +255,11 @@ fn handleNewXdgToplevel(
     };
 }
 
-fn handleNewInput(
-    listener: *wl.Listener(*wlr.InputDevice),
-    device: *wlr.InputDevice,
-) void {
-    const server: *hwc.Server = @fieldParentPtr("new_input", listener);
-    switch (device.type) {
-        .keyboard => hwc.Keyboard.create(device) catch |err| {
-            log.err("failed to create keyboard: {}", .{err});
-            return;
-        },
-        .pointer => server.cursor.wlr_cursor.attachInputDevice(device),
-        else => {},
-    }
-
-    server.seat.setCapabilities(.{
-        .pointer = true,
-        .keyboard = server.keyboards.length() > 0,
-    });
-}
-
-fn handleRequestSetCursor(
-    listener: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
-    event: *wlr.Seat.event.RequestSetCursor,
-) void {
-    const server: *hwc.Server = @fieldParentPtr("request_set_cursor", listener);
-    if (event.seat_client == server.seat.pointer_state.focused_client) {
-        server.cursor.wlr_cursor.setSurface(
-            event.surface,
-            event.hotspot_x,
-            event.hotspot_y,
-        );
-    }
-}
-
-fn handleRequestSetSelection(
-    listener: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
-    event: *wlr.Seat.event.RequestSetSelection,
-) void {
-    const server: *hwc.Server = @fieldParentPtr("request_set_selection", listener);
-    server.seat.setSelection(event.source, event.serial);
-}
-
 fn handleNewToplevelDecoration(
     _: *wl.Listener(*wlr.XdgToplevelDecorationV1),
     wlr_xdg_decoration: *wlr.XdgToplevelDecorationV1,
 ) void {
     hwc.XdgDecoration.init(wlr_xdg_decoration);
-}
-
-/// Repeat key mapping
-fn handleMappingRepeatTimeout(self: *hwc.Server) c_int {
-    if (self.repeating_keybind) |keybind| {
-        const rate = self.config.keyboard_repeat_rate;
-        const ms_delay = if (rate > 0) 1000 / rate else 0;
-        self.keybind_repeat_timer.timerUpdate(ms_delay) catch {
-            log.err("failed to update mapping repeat timer", .{});
-        };
-        keybind.runLuaCallback() catch {};
-    }
-    return 0;
-}
-
-pub fn clearRepeatingMapping(self: *hwc.Server) void {
-    self.keybind_repeat_timer.timerUpdate(0) catch {
-        log.err("failed to clear mapping repeat timer", .{});
-    };
-    self.repeating_keybind = null;
 }
 
 fn handleRendererLost(listener: *wl.Listener(void)) void {

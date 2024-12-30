@@ -43,6 +43,10 @@ pub fn init() !*Lua {
         .{ .name = "add_keybind", .func = ziglua.wrap(addKeybind) },
         .{ .name = "remove_keybind", .func = ziglua.wrap(removeKeybind) },
         .{ .name = "remove_keybind_by_id", .func = ziglua.wrap(removeKeybindById) },
+        .{ .name = "create_keyboard_group", .func = ziglua.wrap(createKeyboardGroup) },
+        .{ .name = "destroy_keyboard_group", .func = ziglua.wrap(destroyKeyboardGroup) },
+        .{ .name = "keyboard_group_add_keyboard", .func = ziglua.wrap(addKeyboardGroup) },
+        .{ .name = "keyboard_group_remove_keyboard", .func = ziglua.wrap(removeKeyboardGroup) },
         .{ .name = "create_output", .func = ziglua.wrap(createOutput) },
     });
 
@@ -294,14 +298,14 @@ fn addKeybind(lua: *Lua) i32 {
     {
         const keysym = blk: {
             const key_str = lua.toString(1) catch unreachable;
-            break :blk hwc.Keybind.parseKeysym(key_str) catch {
+            break :blk hwc.input.Keybind.parseKeysym(key_str) catch {
                 lua.raiseErrorStr("unable to parse key", .{});
                 return 0;
             };
         };
         const modifiers = blk: {
             const modifiers_str = lua.toString(2) catch unreachable;
-            break :blk hwc.Keybind.parseModifiers(modifiers_str) catch {
+            break :blk hwc.input.Keybind.parseModifiers(modifiers_str) catch {
                 lua.raiseErrorStr("unable to parse modifiers", .{});
                 return 0;
             };
@@ -310,7 +314,7 @@ fn addKeybind(lua: *Lua) i32 {
         const is_on_release = lua.toBoolean(4);
         const layout_index = lua.toInteger(5) catch null;
 
-        const keybind = hwc.Keybind{
+        const keybind = hwc.input.Keybind{
             .keysym = keysym,
             .modifiers = modifiers,
             .id = @intCast(server.config.keybinds.items.len),
@@ -322,9 +326,9 @@ fn addKeybind(lua: *Lua) i32 {
         // Repeating mappings borrow the Mapping directly. To prevent a possible
         // crash if the Mapping ArrayList is reallocated, stop any currently
         // repeating mappings.
-        server.clearRepeatingMapping();
+        server.input_manager.defaultSeat().clearRepeatingMapping();
         server.config.keybinds.append(util.allocator, keybind) catch {
-            lua.raiseErrorStr("allocation failed.", .{});
+            lua.raiseErrorStr("allocation failed", .{});
             return 0;
         };
     }
@@ -357,15 +361,15 @@ fn removeKeybind(lua: *Lua) i32 {
     }
 
     var index: u32 = 0;
-    const found_keybind: ?hwc.Keybind = blk: {
+    const found_keybind: ?hwc.input.Keybind = blk: {
         const keysym = inner: {
             const keybind_str = lua.toString(1) catch unreachable;
-            break :inner hwc.Keybind.parseKeysym(keybind_str) catch unreachable;
+            break :inner hwc.input.Keybind.parseKeysym(keybind_str) catch unreachable;
         };
 
         const modifiers = inner: {
             const modifiers_str = lua.toString(2) catch unreachable;
-            break :inner hwc.Keybind.parseModifiers(modifiers_str) catch unreachable;
+            break :inner hwc.input.Keybind.parseModifiers(modifiers_str) catch unreachable;
         };
 
         for (server.config.keybinds.items) |keybind| {
@@ -407,6 +411,141 @@ fn removeKeybindById(lua: *Lua) i32 {
 
     lua.pushBoolean(false);
     return 1;
+}
+
+// TODO: hwc.Seat type as userdata w/ metatable for methods
+// (will do after merging input branch)
+
+// TODO: hwc.KeyboardGroup type as userdata w/ metatable for methods
+// (will do after merging input branch)
+// :add_keyboard(device_identifier)
+// :remove_keyboard(device_identifier)
+// destroy() on __gc
+fn createKeyboardGroup(lua: *Lua) i32 {
+    if (!lua.isString(1)) {
+        lua.raiseErrorStr("seat identifier is not a string", .{});
+        return 0;
+    }
+    if (!lua.isString(2)) {
+        lua.raiseErrorStr("keyboard group identifier is not a string", .{});
+        return 0;
+    }
+
+    const seat_id = lua.toString(1) catch unreachable;
+    const keyboard_group_id = lua.toString(2) catch unreachable;
+
+    const seat = api.findSeat(seat_id) orelse {
+        lua.raiseErrorStr("no seat named %s", .{mem.sliceTo(seat_id, 0).ptr});
+        return;
+    };
+
+    const keyboard_group = api.createKeyboardGroup() catch {
+        lua.raiseErrorStr("keyboard group failed to allocate", .{});
+        return 0;
+    };
+
+    keyboard_group.init(seat, keyboard_group_id) catch {
+        lua.raiseErrorStr("keyboard group failed to init", .{});
+        return 0;
+    };
+
+    return 0;
+}
+
+fn destroyKeyboardGroup(lua: *Lua) i32 {
+    if (!lua.isString(1)) {
+        lua.raiseErrorStr("seat identifier is not a string", .{});
+        return 0;
+    }
+    if (!lua.isString(2)) {
+        lua.raiseErrorStr("keyboard group identifier is not a string", .{});
+        return 0;
+    }
+
+    const seat_id = lua.toString(1) catch unreachable;
+    const seat = api.findSeat(seat_id) orelse {
+        lua.raiseErrorStr("no seat named %s", .{mem.sliceTo(seat_id, 0).ptr});
+        return;
+    };
+
+    const keyboard_group_id = lua.toString(2) catch unreachable;
+    const keyboard_group = api.findKeyboardGroup(seat, keyboard_group_id) orelse {
+        lua.raiseErrorStr("no keyboard group named %s", .{mem.sliceTo(keyboard_group_id, 0).ptr});
+        return;
+    };
+
+    keyboard_group.deinit();
+
+    return 0;
+}
+
+fn addKeyboardGroup(lua: *Lua) i32 {
+    if (!lua.isString(1)) {
+        lua.raiseErrorStr("seat identifier is not a string", .{});
+        return 0;
+    }
+    if (!lua.isString(2)) {
+        lua.raiseErrorStr("keyboard group identifier is not a string", .{});
+        return 0;
+    }
+    if (!lua.isString(3)) {
+        lua.raiseErrorStr("keyboard device identifier is not a string", .{});
+        return 0;
+    }
+
+    const seat_id = lua.toString(1) catch unreachable;
+    const seat = api.findSeat(seat_id) orelse {
+        lua.raiseErrorStr("no seat named %s", .{mem.sliceTo(seat_id, 0).ptr});
+        return;
+    };
+
+    const keyboard_group_id = lua.toString(2) catch unreachable;
+    const keyboard_group = api.findKeyboardGroup(seat, keyboard_group_id) orelse {
+        lua.raiseErrorStr("no keyboard group named %s", .{mem.sliceTo(keyboard_group_id, 0).ptr});
+        return;
+    };
+
+    const keyboard_device_id = lua.toString(3) catch unreachable;
+    keyboard_group.addKeyboard(keyboard_device_id) catch {
+        lua.raiseErrorStr("failed to add %s to %s", .{
+            mem.sliceTo(keyboard_device_id, 0).ptr,
+            mem.sliceTo(keyboard_group_id, 0).ptr,
+        });
+        return;
+    };
+
+    return 0;
+}
+
+fn removeKeyboardGroup(lua: *Lua) i32 {
+    if (!lua.isString(1)) {
+        lua.raiseErrorStr("seat identifier is not a string", .{});
+        return 0;
+    }
+    if (!lua.isString(2)) {
+        lua.raiseErrorStr("keyboard group identifier is not a string", .{});
+        return 0;
+    }
+    if (!lua.isString(3)) {
+        lua.raiseErrorStr("keyboard device identifier is not a string", .{});
+        return 0;
+    }
+
+    const seat_id = lua.toString(1) catch unreachable;
+    const seat = api.findSeat(seat_id) orelse {
+        lua.raiseErrorStr("no seat named %s", .{mem.sliceTo(seat_id, 0).ptr});
+        return;
+    };
+
+    const keyboard_group_id = lua.toString(2) catch unreachable;
+    const keyboard_group = api.findKeyboardGroup(seat, keyboard_group_id) orelse {
+        lua.raiseErrorStr("no keyboard group named %s", .{mem.sliceTo(keyboard_group_id, 0).ptr});
+        return;
+    };
+
+    keyboard_group.removeKeyboard(lua.toString(3) catch unreachable);
+
+    return 0;
 }
 
 const Output = struct {

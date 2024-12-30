@@ -16,6 +16,7 @@ scene_tree: *wlr.SceneTree,
 geometry: wlr.Box = undefined,
 previous_geometry: wlr.Box = undefined,
 decoration: ?hwc.XdgDecoration = null,
+keyboard_shortcuts_inhibit: bool = false,
 
 commit: wl.Listener(*wlr.Surface) =
     wl.Listener(*wlr.Surface).init(handleCommit),
@@ -83,7 +84,7 @@ fn handleMap(listener: *wl.Listener(void)) void {
     server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
 
     toplevel.xdg_toplevel.base.getGeometry(&toplevel.geometry);
-    const usable_area: wlr.Box = getUsableArea(getActiveOutput(toplevel).?);
+    const usable_area: wlr.Box = getUsableArea(toplevel.getActiveOutput().?);
     if (toplevel.geometry.width > usable_area.width) {
         toplevel.geometry.width = usable_area.width;
     }
@@ -124,12 +125,12 @@ fn handleMove(
     _: *wlr.XdgToplevel.event.Move,
 ) void {
     const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_move", listener);
-    server.cursor.grabbed_toplevel = toplevel;
-    server.cursor.mode = .move;
-    server.cursor.grab_x = server.cursor.wlr_cursor.x -
-        @as(f64, @floatFromInt(toplevel.geometry.x));
-    server.cursor.grab_y = server.cursor.wlr_cursor.y -
-        @as(f64, @floatFromInt(toplevel.geometry.y));
+    var cursor = &server.input_manager.defaultSeat().cursor;
+
+    cursor.grabbed_toplevel = toplevel;
+    cursor.mode = .move;
+    cursor.grab_x = cursor.wlr_cursor.x - @as(f64, @floatFromInt(toplevel.geometry.x));
+    cursor.grab_y = cursor.wlr_cursor.y - @as(f64, @floatFromInt(toplevel.geometry.y));
 }
 
 fn handleResize(
@@ -137,22 +138,23 @@ fn handleResize(
     event: *wlr.XdgToplevel.event.Resize,
 ) void {
     const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_resize", listener);
+    var cursor = &server.input_manager.defaultSeat().cursor;
 
-    server.cursor.grabbed_toplevel = toplevel;
-    server.cursor.mode = .resize;
-    server.cursor.resize_edges = event.edges;
+    cursor.grabbed_toplevel = toplevel;
+    cursor.mode = .resize;
+    cursor.resize_edges = event.edges;
 
     var box: wlr.Box = undefined;
     toplevel.xdg_toplevel.base.getGeometry(&box);
 
     const border_x = toplevel.geometry.x + box.x + if (event.edges.right) box.width else 0;
     const border_y = toplevel.geometry.y + box.y + if (event.edges.bottom) box.height else 0;
-    server.cursor.grab_x = server.cursor.wlr_cursor.x - @as(f64, @floatFromInt(border_x));
-    server.cursor.grab_y = server.cursor.wlr_cursor.y - @as(f64, @floatFromInt(border_y));
+    cursor.grab_x = cursor.wlr_cursor.x - @as(f64, @floatFromInt(border_x));
+    cursor.grab_y = cursor.wlr_cursor.y - @as(f64, @floatFromInt(border_y));
 
-    server.cursor.grab_box = box;
-    server.cursor.grab_box.x += toplevel.geometry.x;
-    server.cursor.grab_box.y += toplevel.geometry.y;
+    cursor.grab_box = box;
+    cursor.grab_box.x += toplevel.geometry.x;
+    cursor.grab_box.y += toplevel.geometry.y;
 }
 
 fn requestMinimize(listener: *wl.Listener(void)) void {
@@ -201,7 +203,7 @@ fn requestFullscreen(listener: *wl.Listener(void)) void {
 
     const is_fullscreen: bool = toplevel.xdg_toplevel.current.fullscreen;
     if (!is_fullscreen) {
-        const wlr_output: ?*wlr.Output = getActiveOutput(toplevel);
+        const wlr_output: ?*wlr.Output = toplevel.getActiveOutput();
         var output_box: wlr.Box = undefined;
         server.output_layout.getBox(wlr_output, &output_box);
         toplevel.previous_geometry = toplevel.geometry;
@@ -237,12 +239,15 @@ fn getUsableArea(output: *wlr.Output) wlr.Box {
     return usable_area;
 }
 
-fn getActiveOutput(toplevel: *hwc.XdgToplevel) ?*wlr.Output {
+pub fn getActiveOutput(self: *hwc.XdgToplevel) ?*wlr.Output {
+    const output: ?*wlr.Output = undefined;
+
     var closest_x: f64 = undefined;
     var closest_y: f64 = undefined;
-    const output: ?*wlr.Output = undefined;
+
     var geo: wlr.Box = undefined;
-    toplevel.xdg_toplevel.base.getGeometry(&geo);
+    self.xdg_toplevel.base.getGeometry(&geo);
+
     server.output_layout.closestPoint(
         output,
         @floatFromInt(geo.x + @divTrunc(geo.width, 2)),
@@ -250,5 +255,6 @@ fn getActiveOutput(toplevel: *hwc.XdgToplevel) ?*wlr.Output {
         &closest_x,
         &closest_y,
     );
+
     return server.output_layout.outputAt(closest_x, closest_y);
 }
