@@ -10,6 +10,11 @@ const posix = std.posix;
 const fd_t = posix.fd_t;
 const pid_t = posix.pid_t;
 
+const hwc = @import("hwc.zig");
+const util = @import("util.zig");
+
+const server = &@import("root").server;
+
 var original_rlimit: ?posix.rlimit = null;
 
 pub fn processSetup() void {
@@ -244,4 +249,33 @@ pub fn pipedSpawnWithStreams(cmd: []const u8) !ProcessResult {
 
         return info;
     }
+}
+
+pub fn createKeyboardGroup() !*hwc.input.KeyboardGroup {
+    const keyboard_group = try util.allocator.create(hwc.input.KeyboardGroup);
+    errdefer keyboard_group.deinit();
+
+    return keyboard_group;
+}
+
+pub fn findSeat(id: []const u8) ?*hwc.input.Seat {
+    var iterator = server.input_manager.seats.iterator(.forward);
+    while (iterator.next()) |seat| {
+        if (mem.eql(u8, id, mem.sliceTo(seat.wlr_seat.name, 0))) {
+            return seat;
+        }
+    }
+
+    return null;
+}
+
+pub fn findKeyboardGroup(seat: *hwc.input.Seat, id: []const u8) ?*hwc.input.KeyboardGroup {
+    var iterator = seat.keyboard_groups.iterator(.forward);
+    while (iterator.next()) |keyboard_group| {
+        if (mem.eql(u8, id, keyboard_group.identifier)) {
+            return keyboard_group;
+        }
+    }
+
+    return null;
 }

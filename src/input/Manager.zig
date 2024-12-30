@@ -234,7 +234,7 @@ fn handleNewTransientSeat(
     wlr_transient_seat.ready(seat.wlr_seat);
 }
 
-fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void {
+pub fn addDevice(self: *hwc.input.Manager, wlr_input_device: *wlr.InputDevice) !void {
     switch (wlr_input_device.type) {
         .keyboard => {
             const keyboard = try util.allocator.create(hwc.input.Keyboard);

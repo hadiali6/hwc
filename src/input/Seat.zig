@@ -15,6 +15,8 @@ wlr_seat: *wlr.Seat,
 cursor: hwc.input.Cursor,
 relay: hwc.input.Relay,
 
+keyboard_groups: wl.list.Head(hwc.input.KeyboardGroup, .link),
+
 /// Timer for repeating keyboard mappings
 keybind_repeat_timer: *wl.EventSource,
 
@@ -43,6 +45,8 @@ pub fn init(self: *hwc.input.Seat, name: [*:0]const u8) !void {
         .wlr_seat = try wlr.Seat.create(server.wl_server, "default"),
         .cursor = undefined,
         .relay = undefined,
+        .keyboard_groups = undefined,
+
         .link = undefined,
     };
 
@@ -50,12 +54,16 @@ pub fn init(self: *hwc.input.Seat, name: [*:0]const u8) !void {
 
     try self.cursor.init();
     self.relay.init();
+    self.keyboard_groups.init();
 
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
     self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);
 }
 
 pub fn deinit(self: *hwc.input.Seat) void {
+    while (self.keyboard_groups.first()) |keyboard_group| {
+        keyboard_group.deinit();
+    }
     self.keybind_repeat_timer.remove();
     self.cursor.deinit();
     self.link.remove();
