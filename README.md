@@ -1,6 +1,10 @@
 # hwc
 Hadi's Wayland Compositor
 
+**Note:**
+This is not in a usable state right now and I am only creating this for learning/fun purposes.
+Go use a good compositor like [hyprland](https://github.com/hyprwm/Hyprland), [sway](https://github.com/swaywm/sway) or [river](https://codeberg.org/river/river)
+
 # Building
 
 **Install the following dependencies:**
