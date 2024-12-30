@@ -95,15 +95,15 @@ pub fn main() !void {
 
     api.processSetup();
 
-    lua_state = try lua.init();
-    defer lua_state.deinit();
-
     wlr.log.init(wlr_log_level, null);
 
     try server.init();
     defer server.deinit();
 
     try server.start();
+
+    lua_state = try lua.init();
+    defer lua_state.deinit();
 
     if (cli_args_result.flags.s) |startup_cmd| {
         try api.spawn(startup_cmd);

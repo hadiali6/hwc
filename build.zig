@@ -5,11 +5,32 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const lua_version = std.meta.stringToEnum(
+        enum {
+            lua51,
+            lua52,
+            lua53,
+            lua54,
+            luajit,
+            luau,
+        },
+        b.option([]const u8, "lua-version", "Choose lua version") orelse "none",
+    ) orelse .lua51;
+
+    switch (lua_version) {
+        .lua51, .luajit => {},
+        .lua52, .lua53, .lua54 => std.log.warn("lua 5.2, 5.3, and 5.4 may not work", .{}),
+        .luau => {
+            std.log.err("luau is not supported", .{});
+            return;
+        },
+    }
+
     const ziglua = b.dependency("ziglua", .{
         .target = target,
         .optimize = optimize,
-        .lang = .lua51,
         .shared = true,
+        .lang = lua_version,
     }).module("ziglua");
 
     const scanner = Scanner.create(b, .{});
@@ -31,19 +52,18 @@ pub fn build(b: *std.Build) void {
     scanner.generate("zwp_pointer_gestures_v1", 3);
     scanner.generate("zwp_pointer_constraints_v1", 1);
 
-    const wayland = b.createModule(.{ .root_source_file = scanner.result });
-
-    const xkbcommon = b.dependency("zig-xkbcommon", .{}).module("xkbcommon");
-    const pixman = b.dependency("zig-pixman", .{}).module("pixman");
-    const wlroots = b.dependency("zig-wlroots", .{}).module("wlroots");
+    const wayland_bindings = b.createModule(.{ .root_source_file = scanner.result });
+    const xkbcommon_bindings = b.dependency("zig-xkbcommon", .{}).module("xkbcommon");
+    const pixman_bindings = b.dependency("zig-pixman", .{}).module("pixman");
+    const wlroots_bindings = b.dependency("zig-wlroots", .{}).module("wlroots");
     const libinput_bindings = b.dependency("zig-libinput", .{}).module("libinput");
 
-    wlroots.addImport("wayland", wayland);
-    wlroots.addImport("xkbcommon", xkbcommon);
-    wlroots.addImport("pixman", pixman);
+    wlroots_bindings.addImport("wayland", wayland_bindings);
+    wlroots_bindings.addImport("xkbcommon", xkbcommon_bindings);
+    wlroots_bindings.addImport("pixman", pixman_bindings);
 
-    wlroots.resolved_target = target;
-    wlroots.linkSystemLibrary("wlroots-0.18", .{});
+    wlroots_bindings.resolved_target = target;
+    wlroots_bindings.linkSystemLibrary("wlroots-0.18", .{});
 
     const hwc_exe = b.addExecutable(.{
         .name = "hwc",
@@ -51,6 +71,16 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    const exe_check = b.addExecutable(.{
+        .name = "parser",
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const check = b.step("check", "Check if parser compiles");
+    check.dependOn(&exe_check.step);
 
     const options = b.addOptions();
     options.addOption([]const u8, "version", "0.0.1");
@@ -60,9 +90,9 @@ pub fn build(b: *std.Build) void {
 
     hwc_exe.root_module.addImport("ziglua", ziglua);
 
-    hwc_exe.root_module.addImport("wayland", wayland);
-    hwc_exe.root_module.addImport("xkbcommon", xkbcommon);
-    hwc_exe.root_module.addImport("wlroots", wlroots);
+    hwc_exe.root_module.addImport("wayland", wayland_bindings);
+    hwc_exe.root_module.addImport("xkbcommon", xkbcommon_bindings);
+    hwc_exe.root_module.addImport("wlroots", wlroots_bindings);
     hwc_exe.root_module.addImport("libinput", libinput_bindings);
 
     hwc_exe.linkSystemLibrary("wayland-server");
@@ -79,6 +109,6 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-    const run_step = b.step("run", "Run the app");
+    const run_step = b.step("run", "run hwc");
     run_step.dependOn(&run_cmd.step);
 }
