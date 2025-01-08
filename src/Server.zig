@@ -58,6 +58,10 @@ screencopy_manager: *wlr.ScreencopyManagerV1,
 xdg_output_manager: *wlr.XdgOutputManagerV1,
 presentation: *wlr.Presentation,
 
+wlr_layer_shell: *wlr.LayerShellV1,
+new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) =
+    wl.Listener(*wlr.LayerSurfaceV1).init(handleNewLayerSurface),
+
 pub fn init(self: *hwc.Server) !void {
     const wl_server = try wl.Server.create();
     const event_loop = wl_server.getEventLoop();
@@ -100,6 +104,7 @@ pub fn init(self: *hwc.Server) !void {
         .xdg_output_manager = try wlr.XdgOutputManagerV1.create(wl_server, output_layout),
         .presentation = try wlr.Presentation.create(wl_server, backend),
         .hidden = hidden_scene_tree,
+        .wlr_layer_shell = try wlr.LayerShellV1.create(wl_server, 4),
     };
 
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
@@ -116,6 +121,8 @@ pub fn init(self: *hwc.Server) !void {
     self.mapped_toplevels.init();
 
     self.xdg_decoration_manager.events.new_toplevel_decoration.add(&self.new_toplevel_decoration);
+
+    self.wlr_layer_shell.events.new_surface.add(&self.new_layer_surface);
 
     try self.config.init();
     try self.output_manager.init();
@@ -293,4 +300,27 @@ fn handleRendererLost(listener: *wl.Listener(void)) void {
 
     server.allocator.destroy();
     server.allocator = new_allocator;
+}
+
+fn handleNewLayerSurface(
+    listener: *wl.Listener(*wlr.LayerSurfaceV1),
+    wlr_layer_surface: *wlr.LayerSurfaceV1,
+) void {
+    const server: *hwc.Server = @fieldParentPtr("new_layer_surface", listener);
+
+    if (wlr_layer_surface.output == null) {
+        const seat = server.input_manager.defaultSeat();
+        const wlr_output = server.output_layout.outputAt(
+            seat.cursor.wlr_cursor.x,
+            seat.cursor.wlr_cursor.y,
+        ) orelse {
+            log.info("no output to assign layer surface", .{});
+            wlr_layer_surface.destroy();
+            return;
+        };
+
+        wlr_layer_surface.output = wlr_output;
+    }
+
+    // TODO: create hwc.LayerSurface
 }
