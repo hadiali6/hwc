@@ -36,8 +36,6 @@ new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) =
     wl.Listener(*wlr.XdgToplevel).init(handleNewXdgToplevel),
 mapped_toplevels: wl.list.Head(hwc.XdgToplevel, .link),
 
-focused: ?*hwc.XdgToplevel = null,
-
 xdg_decoration_manager: *wlr.XdgDecorationManagerV1,
 new_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) =
     wl.Listener(*wlr.XdgToplevelDecorationV1).init(handleNewToplevelDecoration),
@@ -178,55 +176,6 @@ pub fn toplevelAt(self: *hwc.Server, lx: f64, ly: f64) ?ToplevelAtResult {
         }
     }
     return null;
-}
-
-pub fn focusToplevel(
-    self: *hwc.Server,
-    toplevel: *hwc.XdgToplevel,
-    surface: *wlr.Surface,
-) void {
-    const wlr_seat = self.input_manager.defaultSeat().wlr_seat;
-    self.focused = toplevel;
-
-    if (wlr_seat.keyboard_state.focused_surface) |previous_surface| {
-        if (previous_surface == surface) return;
-        if (wlr.XdgSurface.tryFromWlrSurface(previous_surface)) |xdg_surface| {
-            if (xdg_surface.role == .toplevel) {
-                const previous_toplevel: ?*wlr.XdgToplevel = xdg_surface.role_data.toplevel;
-                if (previous_toplevel != null) {
-                    _ = previous_toplevel.?.setActivated(false);
-                }
-            }
-        }
-    }
-
-    toplevel.scene_tree.node.raiseToTop();
-    toplevel.link.remove();
-    self.mapped_toplevels.prepend(toplevel);
-
-    _ = toplevel.xdg_toplevel.setActivated(true);
-
-    const wlr_keyboard = wlr_seat.getKeyboard() orelse return;
-    wlr_seat.keyboardNotifyEnter(
-        surface,
-        wlr_keyboard.keycodes[0..wlr_keyboard.num_keycodes],
-        &wlr_keyboard.modifiers,
-    );
-
-    {
-        var iterator = self.input_manager.devices.iterator(.forward);
-        while (iterator.next()) |input_device| {
-            const wlr_input_device = input_device.wlr_input_device;
-
-            if (wlr_input_device.type == .tablet_pad) {
-                const wlr_tablet_pad = wlr_input_device.toTabletPad();
-
-                if (@as(?*hwc.input.Tablet.Pad, @alignCast(@ptrCast(wlr_tablet_pad.data)))) |tablet_pad| {
-                    tablet_pad.setFocusedSurface(surface);
-                }
-            }
-        }
-    }
 }
 
 fn handleNewOutput(

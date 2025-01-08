@@ -62,6 +62,13 @@ pub fn create(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
     wlr_toplevel.events.destroy.add(&toplevel.destroy);
 }
 
+pub fn destroyPopups(self: *hwc.XdgToplevel) void {
+    var iterator = self.xdg_toplevel.base.popups.safeIterator(.forward);
+    while (iterator.next()) |wlr_xdg_popup| {
+        wlr_xdg_popup.destroy();
+    }
+}
+
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const toplevel: *hwc.XdgToplevel = @fieldParentPtr("commit", listener);
     if (toplevel.xdg_toplevel.base.initial_commit) {
@@ -81,7 +88,14 @@ fn handleMap(listener: *wl.Listener(void)) void {
     }
 
     server.mapped_toplevels.prepend(toplevel);
-    server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
+
+    {
+        // TODO: choose a proper seat so other seats arent bothered
+        var iterator = server.input_manager.seats.iterator(.forward);
+        while (iterator.next()) |seat| {
+            seat.focus(.{ .toplevel = toplevel });
+        }
+    }
 
     toplevel.xdg_toplevel.base.getGeometry(&toplevel.geometry);
     const usable_area: wlr.Box = getUsableArea(toplevel.getActiveOutput().?);
@@ -166,12 +180,17 @@ fn requestMinimize(listener: *wl.Listener(void)) void {
         toplevel.geometry.y = -toplevel.geometry.height;
         const next_toplevel: *hwc.XdgToplevel = @fieldParentPtr("link", toplevel.link.next.?);
         if (server.mapped_toplevels.length() > 1) {
-            server.focusToplevel(
-                next_toplevel,
-                next_toplevel.xdg_toplevel.base.surface,
-            );
+            // TODO: choose a proper seat so other seats arent bothered
+            var iterator = server.input_manager.seats.iterator(.forward);
+            while (iterator.next()) |seat| {
+                seat.focus(.{ .toplevel = next_toplevel });
+            }
         } else {
-            server.focusToplevel(toplevel, toplevel.xdg_toplevel.base.surface);
+            // TODO: choose a proper seat so other seats arent bothered
+            var iterator = server.input_manager.seats.iterator(.forward);
+            while (iterator.next()) |seat| {
+                seat.focus(.{ .toplevel = toplevel });
+            }
         }
     } else {
         toplevel.geometry = toplevel.previous_geometry;

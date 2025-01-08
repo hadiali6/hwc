@@ -1,3 +1,5 @@
+const wlr = @import("wlroots");
+
 pub const Config = @import("Config.zig");
 pub const Output = @import("Output.zig");
 pub const OutputManager = @import("OutputManager.zig");
@@ -5,6 +7,22 @@ pub const Server = @import("Server.zig");
 pub const XdgDecoration = @import("Decoration.zig");
 pub const XdgPopup = @import("XdgPopup.zig");
 pub const XdgToplevel = @import("XdgToplevel.zig");
+
+pub const Focusable = union(enum) {
+    none: void,
+    toplevel: *XdgToplevel,
+    // TODO:
+    // layersurface
+    // locksurface
+    // xwayland
+
+    pub fn wlrSurface(self: Focusable) ?*wlr.Surface {
+        return switch (self) {
+            .toplevel => |toplevel| toplevel.xdg_toplevel.base.surface,
+            .none => null,
+        };
+    }
+};
 
 pub const input = struct {
     pub const Cursor = @import("input/Cursor.zig");

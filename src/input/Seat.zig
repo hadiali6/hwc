@@ -15,6 +15,8 @@ wlr_seat: *wlr.Seat,
 cursor: hwc.input.Cursor,
 relay: hwc.input.Relay,
 
+focused: hwc.Focusable = .none,
+
 keyboard_groups: wl.list.Head(hwc.input.KeyboardGroup, .link),
 
 /// Timer for repeating keyboard mappings
@@ -68,6 +70,63 @@ pub fn deinit(self: *hwc.input.Seat) void {
     self.cursor.deinit();
     self.link.remove();
     util.allocator.destroy(self);
+}
+
+pub fn focus(self: *hwc.input.Seat, target: hwc.Focusable) void {
+    if (std.meta.eql(self.focused, target)) {
+        return;
+    }
+
+    switch (self.focused) {
+        .toplevel => |toplevel| {
+            _ = toplevel.xdg_toplevel.setActivated(false);
+            toplevel.destroyPopups();
+        },
+        .none => {},
+    }
+
+    self.focused = target;
+
+    switch (target) {
+        .toplevel => |toplevel| {
+            toplevel.scene_tree.node.raiseToTop();
+
+            // move to top of stack aka first in list
+            toplevel.link.remove();
+            server.mapped_toplevels.prepend(toplevel);
+
+            _ = toplevel.xdg_toplevel.setActivated(true);
+        },
+        .none => {
+            self.wlr_seat.keyboardClearFocus();
+        },
+    }
+
+    const target_wlr_surface = target.wlrSurface();
+
+    self.relay.focus(target_wlr_surface);
+
+    if (target_wlr_surface == null) {
+        return;
+    }
+
+    self.keyboardNotifyEnter(target_wlr_surface.?);
+
+    var iterator = server.input_manager.devices.iterator(.forward);
+    while (iterator.next()) |input_device| {
+        const wlr_input_device = input_device.wlr_input_device;
+
+        if (wlr_input_device.type == .tablet_pad) {
+            const wlr_tablet_pad = wlr_input_device.toTabletPad();
+
+            if (@as(
+                ?*hwc.input.Tablet.Pad,
+                @alignCast(@ptrCast(wlr_tablet_pad.data)),
+            )) |tablet_pad| {
+                tablet_pad.setFocusedSurface(target_wlr_surface.?);
+            }
+        }
+    }
 }
 
 fn handleRequestSetCursor(

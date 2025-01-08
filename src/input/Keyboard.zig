@@ -116,8 +116,8 @@ fn handleKey(
 
     const keysyms = xkb_state.keyGetSyms(keycode);
 
-    const ignore_binds = if (server.focused) |focused_toplevel|
-        focused_toplevel.keyboard_shortcuts_inhibit
+    const ignore_binds = if (seat.focused == .toplevel)
+        seat.focused.toplevel.keyboard_shortcuts_inhibit
     else
         false;
 

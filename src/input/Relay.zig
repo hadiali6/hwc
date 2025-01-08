@@ -76,8 +76,8 @@ pub fn newInputMethod(
     wlr_input_method.events.grab_keyboard.add(&self.grab_keyboard);
     wlr_input_method.events.new_popup_surface.add(&self.new_popup);
 
-    if (server.focused) |toplevel| {
-        self.focus(toplevel.xdg_toplevel.base.surface);
+    if (seat.focused == .toplevel) {
+        self.focus(seat.focused.wlrSurface().?);
     }
 }
 

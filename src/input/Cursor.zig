@@ -179,7 +179,11 @@ fn handleButton(
         cursor.wlr_cursor.x,
         cursor.wlr_cursor.y,
     )) |result| {
-        server.focusToplevel(result.toplevel, result.surface);
+        // TODO: choose a proper seat so other seats arent bothered
+        var iterator = server.input_manager.seats.iterator(.forward);
+        while (iterator.next()) |seat| {
+            seat.focus(.{ .toplevel = result.toplevel });
+        }
     }
 }
 
@@ -497,7 +501,13 @@ fn handleTouchDown(listener: *wl.Listener(*wlr.Touch.event.Down), event: *wlr.To
     };
 
     if (server.toplevelAt(lx, ly)) |result| {
-        server.focusToplevel(result.toplevel, result.surface);
+        {
+            // TODO: choose a proper seat so other seats arent bothered
+            var iterator = server.input_manager.seats.iterator(.forward);
+            while (iterator.next()) |seat| {
+                seat.focus(.{ .toplevel = result.toplevel });
+            }
+        }
 
         _ = server.input_manager.defaultSeat().wlr_seat.touchNotifyDown(
             result.surface,
