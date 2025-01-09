@@ -8,6 +8,8 @@ const wlr = @import("wlroots");
 const util = @import("util.zig");
 const hwc = @import("hwc.zig");
 
+const server = &@import("root").server;
+
 xdg_popup: *wlr.XdgPopup,
 
 root: *wlr.SceneTree,
@@ -45,14 +47,33 @@ pub fn create(
 
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const popup: *hwc.XdgPopup = @fieldParentPtr("commit", listener);
+
     if (popup.xdg_popup.base.initial_commit) {
-        _ = popup.xdg_popup.base.scheduleConfigure();
-        // handleReposition(&popup.reposition);
+        handleReposition(&popup.reposition);
     }
 }
 
 fn handleReposition(listener: *wl.Listener(void)) void {
-    _ = listener;
+    const popup: *hwc.XdgPopup = @fieldParentPtr("reposition", listener);
+
+    if (hwc.Focusable.fromNode(&popup.root.node)) |focusable| {
+        const wlr_output: *wlr.Output = switch (focusable.*) {
+            .toplevel => |toplevel| toplevel.getActiveOutput() orelse return,
+            .none => unreachable,
+        };
+
+        var box: wlr.Box = undefined;
+        server.output_layout.getBox(wlr_output, &box);
+
+        var root_lx: c_int = undefined;
+        var root_ly: c_int = undefined;
+        _ = popup.root.node.coords(&root_lx, &root_ly);
+
+        box.x -= root_lx;
+        box.y -= root_ly;
+
+        popup.xdg_popup.unconstrainFromBox(&box);
+    }
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {
