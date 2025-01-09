@@ -146,36 +146,36 @@ pub fn start(self: *hwc.Server) !void {
     }
 }
 
-const ToplevelAtResult = struct {
-    toplevel: *hwc.XdgToplevel,
-    surface: *wlr.Surface,
-    node: *wlr.SceneNode,
+const AtResult = struct {
+    wlr_scene_node: *wlr.SceneNode,
+    wlr_surface: ?*wlr.Surface,
     sx: f64,
     sy: f64,
 };
 
-pub fn toplevelAt(self: *hwc.Server, lx: f64, ly: f64) ?ToplevelAtResult {
+pub fn resultAt(self: *hwc.Server, lx: f64, ly: f64) ?AtResult {
     var sx: f64 = undefined;
     var sy: f64 = undefined;
-    if (self.scene.tree.node.at(lx, ly, &sx, &sy)) |node| {
-        if (node.type != .buffer) return null;
-        const scene_buffer = wlr.SceneBuffer.fromNode(node);
-        const scene_surface = wlr.SceneSurface.tryFromBuffer(scene_buffer) orelse return null;
+    const wlr_scene_node = self.scene.tree.node.at(lx, ly, &sx, &sy) orelse return null;
 
-        var it: ?*wlr.SceneTree = node.parent;
-        while (it) |n| : (it = n.node.parent) {
-            if (@as(?*hwc.XdgToplevel, @ptrFromInt(n.node.data))) |toplevel| {
-                return ToplevelAtResult{
-                    .toplevel = toplevel,
-                    .surface = scene_surface.surface,
-                    .node = node,
-                    .sx = sx,
-                    .sy = sy,
-                };
+    const wlr_surface: ?*wlr.Surface = blk: {
+        if (wlr_scene_node.type == .buffer) {
+            const wlr_scene_buffer = wlr.SceneBuffer.fromNode(wlr_scene_node);
+
+            if (wlr.SceneSurface.tryFromBuffer(wlr_scene_buffer)) |wlr_scene_surface| {
+                break :blk wlr_scene_surface.surface;
             }
         }
-    }
-    return null;
+
+        break :blk null;
+    };
+
+    return .{
+        .wlr_scene_node = wlr_scene_node,
+        .wlr_surface = wlr_surface,
+        .sx = sx,
+        .sy = sy,
+    };
 }
 
 fn handleNewOutput(

@@ -22,7 +22,8 @@ commit: wl.Listener(*wlr.Surface) =
     wl.Listener(*wlr.Surface).init(handleCommit),
 map: wl.Listener(void) = wl.Listener(void).init(handleMap),
 unmap: wl.Listener(void) = wl.Listener(void).init(handleUnmap),
-destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
+toplevel_destroy: wl.Listener(void) = wl.Listener(void).init(handleToplevelDestroy),
+scene_node_destroy: wl.Listener(void) = wl.Listener(void).init(handleSceneNodeDestroy),
 new_popup: wl.Listener(*wlr.XdgPopup) =
     wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
 request_fullscreen: wl.Listener(void) =
@@ -51,15 +52,22 @@ pub fn create(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
         },
     };
 
-    toplevel.scene_tree.node.data = @intFromPtr(toplevel);
+    const focusable = try util.allocator.create(hwc.Focusable);
+    errdefer util.allocator.destroy(focusable);
+
+    focusable.* = .{ .toplevel = toplevel };
+
+    toplevel.scene_tree.node.data = @intFromPtr(focusable);
     wlr_toplevel.base.data = @intFromPtr(toplevel);
     wlr_toplevel.base.surface.data = @intFromPtr(&toplevel.scene_tree.node);
+
+    toplevel.scene_tree.node.events.destroy.add(&toplevel.scene_node_destroy);
 
     wlr_toplevel.base.surface.events.commit.add(&toplevel.commit);
     wlr_toplevel.base.surface.events.map.add(&toplevel.map);
     wlr_toplevel.base.surface.events.unmap.add(&toplevel.unmap);
     wlr_toplevel.base.events.new_popup.add(&toplevel.new_popup);
-    wlr_toplevel.events.destroy.add(&toplevel.destroy);
+    wlr_toplevel.events.destroy.add(&toplevel.toplevel_destroy);
 }
 
 pub fn destroyPopups(self: *hwc.XdgToplevel) void {
@@ -114,13 +122,24 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     toplevel.link.remove();
 }
 
-fn handleDestroy(listener: *wl.Listener(void)) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("destroy", listener);
+fn handleSceneNodeDestroy(listener: *wl.Listener(void)) void {
+    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("scene_node_destroy", listener);
+    toplevel.scene_node_destroy.link.remove();
+    if (@as(?*hwc.Focusable, @ptrFromInt(toplevel.scene_tree.node.data))) |focusable| {
+        util.allocator.destroy(focusable);
+    } else {
+        // something went wrong if focusable doesnt exist
+        std.debug.assert(false);
+    }
+}
+
+fn handleToplevelDestroy(listener: *wl.Listener(void)) void {
+    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("toplevel_destroy", listener);
 
     toplevel.commit.link.remove();
     toplevel.map.link.remove();
     toplevel.unmap.link.remove();
-    toplevel.destroy.link.remove();
+    toplevel.toplevel_destroy.link.remove();
     toplevel.request_move.link.remove();
     toplevel.request_resize.link.remove();
     toplevel.request_minimize.link.remove();

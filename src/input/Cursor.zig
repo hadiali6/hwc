@@ -175,14 +175,16 @@ fn handleButton(
 
     if (event.state == .released) {
         cursor.mode = .passthrough;
-    } else if (server.toplevelAt(
-        cursor.wlr_cursor.x,
-        cursor.wlr_cursor.y,
-    )) |result| {
-        // TODO: choose a proper seat so other seats arent bothered
-        var iterator = server.input_manager.seats.iterator(.forward);
-        while (iterator.next()) |seat| {
-            seat.focus(.{ .toplevel = result.toplevel });
+        return;
+    }
+
+    if (server.resultAt(cursor.wlr_cursor.x, cursor.wlr_cursor.y)) |result| {
+        if (hwc.Focusable.fromNode(result.wlr_scene_node)) |focusable| {
+            // TODO: choose a proper seat so other seats arent bothered
+            var iterator = server.input_manager.seats.iterator(.forward);
+            while (iterator.next()) |seat| {
+                seat.focus(focusable.*);
+            }
         }
     }
 }
@@ -298,9 +300,11 @@ fn processMotion(
 fn passthrough(self: *hwc.input.Cursor, time_msec: u32) void {
     const wlr_seat = server.input_manager.defaultSeat().wlr_seat;
 
-    if (server.toplevelAt(self.wlr_cursor.x, self.wlr_cursor.y)) |result| {
-        wlr_seat.pointerNotifyEnter(result.surface, result.sx, result.sy);
-        wlr_seat.pointerNotifyMotion(time_msec, result.sx, result.sy);
+    if (server.resultAt(self.wlr_cursor.x, self.wlr_cursor.y)) |result| {
+        if (result.wlr_surface) |wlr_surface| {
+            wlr_seat.pointerNotifyEnter(wlr_surface, result.sx, result.sy);
+            wlr_seat.pointerNotifyMotion(time_msec, result.sx, result.sy);
+        }
     } else {
         self.wlr_cursor.setXcursor(self.xcursor_manager, "default");
         wlr_seat.pointerClearFocus();
@@ -309,11 +313,15 @@ fn passthrough(self: *hwc.input.Cursor, time_msec: u32) void {
 
 fn move(self: *hwc.input.Cursor) void {
     const toplevel: *hwc.XdgToplevel = self.grabbed_toplevel orelse blk: {
-        const toplevel_result_at_cursor = server.toplevelAt(
-            self.wlr_cursor.x,
-            self.wlr_cursor.y,
-        ) orelse return;
-        break :blk toplevel_result_at_cursor.toplevel;
+        const result = server.resultAt(self.wlr_cursor.x, self.wlr_cursor.y) orelse return;
+        const focusable = hwc.Focusable.fromNode(result.wlr_scene_node) orelse return;
+
+        if (focusable.* == .toplevel) {
+            break :blk focusable.toplevel;
+        } else {
+            // TODO: handle different surface types?
+            return;
+        }
     };
 
     toplevel.geometry.x = @as(
@@ -333,11 +341,15 @@ fn move(self: *hwc.input.Cursor) void {
 
 fn resize(self: *hwc.input.Cursor) void {
     const toplevel: *hwc.XdgToplevel = self.grabbed_toplevel orelse blk: {
-        const toplevel_result_at_cursor = server.toplevelAt(
-            self.wlr_cursor.x,
-            self.wlr_cursor.y,
-        ) orelse return;
-        break :blk toplevel_result_at_cursor.toplevel;
+        const result = server.resultAt(self.wlr_cursor.x, self.wlr_cursor.y) orelse return;
+        const focusable = hwc.Focusable.fromNode(result.wlr_scene_node) orelse return;
+
+        if (focusable.* == .toplevel) {
+            break :blk focusable.toplevel;
+        } else {
+            // TODO: handle different surface types?
+            return;
+        }
     };
 
     const border_x = @as(
@@ -500,22 +512,24 @@ fn handleTouchDown(listener: *wl.Listener(*wlr.Touch.event.Down), event: *wlr.To
         return;
     };
 
-    if (server.toplevelAt(lx, ly)) |result| {
-        {
+    if (server.resultAt(lx, ly)) |result| {
+        if (hwc.Focusable.fromNode(result.wlr_scene_node)) |focusable| {
             // TODO: choose a proper seat so other seats arent bothered
             var iterator = server.input_manager.seats.iterator(.forward);
             while (iterator.next()) |seat| {
-                seat.focus(.{ .toplevel = result.toplevel });
+                seat.focus(focusable.*);
             }
         }
 
-        _ = server.input_manager.defaultSeat().wlr_seat.touchNotifyDown(
-            result.surface,
-            event.time_msec,
-            event.touch_id,
-            event.x,
-            event.y,
-        );
+        if (result.wlr_surface) |wlr_surface| {
+            _ = server.input_manager.defaultSeat().wlr_seat.touchNotifyDown(
+                wlr_surface,
+                event.time_msec,
+                event.touch_id,
+                event.x,
+                event.y,
+            );
+        }
     }
 }
 
@@ -533,7 +547,7 @@ fn handleTouchMotion(listener: *wl.Listener(*wlr.Touch.event.Motion), event: *wl
             &point.ly,
         );
 
-        if (server.toplevelAt(point.lx, point.ly)) |result| {
+        if (server.resultAt(point.lx, point.ly)) |result| {
             server.input_manager.defaultSeat().wlr_seat.touchNotifyMotion(
                 event.time_msec,
                 event.touch_id,

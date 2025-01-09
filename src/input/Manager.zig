@@ -124,14 +124,10 @@ fn handleNewKeyboardShortcutsInhibitor(
 
     wlr_keyboard_shortcuts_inhibitor.activate();
 
-    const scene_node: ?*wlr.SceneNode = @ptrFromInt(wlr_keyboard_shortcuts_inhibitor.surface.data);
-    const toplevel: ?*hwc.XdgToplevel = if (scene_node != null)
-        @ptrFromInt(scene_node.?.data)
-    else
-        null;
-
-    if (scene_node != null and toplevel != null) {
-        toplevel.?.keyboard_shortcuts_inhibit = true;
+    if (hwc.Focusable.fromSurface(wlr_keyboard_shortcuts_inhibitor.surface)) |focusable| {
+        if (focusable.* == .toplevel) {
+            focusable.toplevel.keyboard_shortcuts_inhibit = true;
+        }
     }
 }
 

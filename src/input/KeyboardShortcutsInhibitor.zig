@@ -39,14 +39,10 @@ fn handleDestroy(
 ) void {
     const inhibitor: *hwc.input.KeyboardShortcutsInhibitor = @fieldParentPtr("destroy", listener);
 
-    const scene_node: ?*wlr.SceneNode = @ptrFromInt(inhibitor.wlr_keyboard_shortcuts_inhibitor.surface.data);
-    const toplevel: ?*hwc.XdgToplevel = if (scene_node != null)
-        @ptrFromInt(scene_node.?.data)
-    else
-        null;
-
-    if (scene_node != null and toplevel != null) {
-        toplevel.?.keyboard_shortcuts_inhibit = false;
+    if (hwc.Focusable.fromSurface(inhibitor.wlr_keyboard_shortcuts_inhibitor.surface)) |focusable| {
+        if (focusable.* == .toplevel) {
+            focusable.toplevel.keyboard_shortcuts_inhibit = false;
+        }
     }
 
     inhibitor.deinit();

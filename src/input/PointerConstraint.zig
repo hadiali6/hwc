@@ -29,7 +29,7 @@ commit: wl.Listener(*wlr.Surface) =
     wl.Listener(*wlr.Surface).init(handleCommit),
 destroy: wl.Listener(*wlr.PointerConstraintV1) =
     wl.Listener(*wlr.PointerConstraintV1).init(handleDestroy),
-node_destroy: wl.Listener(void) = wl.Listener(void).init(handleNodeDestroy),
+scene_node_destroy: wl.Listener(void) = wl.Listener(void).init(handleNodeDestroy),
 
 pub fn create(wlr_pointer_constraint: *wlr.PointerConstraintV1) !void {
     const seat: *hwc.input.Seat = @ptrFromInt(wlr_pointer_constraint.seat.data);
@@ -69,9 +69,10 @@ pub fn maybeActivate(self: *hwc.input.PointerConstraint) void {
         return;
     }
 
-    const result = server.toplevelAt(seat.cursor.wlr_cursor.x, seat.cursor.wlr_cursor.y) orelse return;
+    const result = server.resultAt(seat.cursor.wlr_cursor.x, seat.cursor.wlr_cursor.y) orelse
+        return;
 
-    if (result.surface != self.wlr_pointer_constraint.surface) {
+    if (result.wlr_surface != self.wlr_pointer_constraint.surface) {
         return;
     }
 
@@ -86,13 +87,13 @@ pub fn maybeActivate(self: *hwc.input.PointerConstraint) void {
 
     self.state = .{
         .active = .{
-            .node = result.node,
+            .node = result.wlr_scene_node,
             .sx = result.sx,
             .sy = result.sy,
         },
     };
 
-    result.node.events.destroy.add(&self.node_destroy);
+    result.wlr_scene_node.events.destroy.add(&self.scene_node_destroy);
 
     log.info("activating pointer constraint", .{});
 
@@ -129,7 +130,7 @@ pub fn deactivate(self: *hwc.input.PointerConstraint) void {
     }
 
     self.state = .inactive;
-    self.node_destroy.link.remove();
+    self.scene_node_destroy.link.remove();
     self.wlr_pointer_constraint.sendDeactivated();
 }
 
@@ -194,7 +195,7 @@ fn handleDestroy(
         if (constraint.wlr_pointer_constraint.current.cursor_hint.enabled) {
             constraint.warpToHint();
         }
-        constraint.node_destroy.link.remove();
+        constraint.scene_node_destroy.link.remove();
     }
 
     constraint.destroy.link.remove();
@@ -208,7 +209,7 @@ fn handleDestroy(
 }
 
 fn handleNodeDestroy(listener: *wl.Listener(void)) void {
-    const constraint: *hwc.input.PointerConstraint = @fieldParentPtr("node_destroy", listener);
+    const constraint: *hwc.input.PointerConstraint = @fieldParentPtr("scene_node_destroy", listener);
 
     log.info("deactivating pointer constraint, scene node destroyed", .{});
 

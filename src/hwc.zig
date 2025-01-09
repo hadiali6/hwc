@@ -22,6 +22,42 @@ pub const Focusable = union(enum) {
             .none => null,
         };
     }
+
+    pub fn wlrSceneNode(self: Focusable) ?*wlr.SceneNode {
+        return switch (self) {
+            .toplevel => |toplevel| sceneNodeFromSurface(toplevel.xdg_toplevel.base.surface),
+            .none => null,
+        };
+    }
+
+    pub fn fromNode(wlr_scene_node: *wlr.SceneNode) ?*Focusable {
+        var n = wlr_scene_node;
+        while (true) {
+            if (@as(?*Focusable, @ptrFromInt(n.data))) |focusable| {
+                return focusable;
+            }
+
+            if (n.parent) |parent_wlr_scene_tree| {
+                n = &parent_wlr_scene_tree.node;
+            } else {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn fromSurface(wlr_surface: *wlr.Surface) ?*Focusable {
+        if (sceneNodeFromSurface(wlr_surface)) |wlr_scene_node| {
+            return fromNode(wlr_scene_node);
+        }
+
+        return null;
+    }
+
+    fn sceneNodeFromSurface(wlr_surface: *wlr.Surface) ?*wlr.SceneNode {
+        return @as(?*wlr.SceneNode, @ptrFromInt(wlr_surface.getRootSurface().data));
+    }
 };
 
 pub const input = struct {

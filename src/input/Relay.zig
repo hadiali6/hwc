@@ -423,11 +423,16 @@ const Popup = struct {
         // Focus should never be sent to subsurfaces
         assert(focused_surface.getRootSurface() == focused_surface);
 
-        const scene_node: *wlr.SceneNode = @ptrFromInt(focused_surface.data);
-        const topelvel: *hwc.XdgToplevel = @ptrFromInt(scene_node.data);
-        const wlr_output: *wlr.Output = topelvel.getActiveOutput().?;
+        const focusable = hwc.Focusable.fromSurface(focused_surface) orelse return;
+        const focused_wlr_scene_node = focusable.wlrSceneNode() orelse return;
 
-        self.surface_tree.node.reparent(topelvel.scene_tree);
+        const wlr_output: *wlr.Output = switch (focusable.*) {
+            .toplevel => |toplevel| toplevel.getActiveOutput().?,
+            .none => unreachable,
+        };
+
+        // TODO: popup tree
+        // self.surface_tree.node.reparent(topelvel.scene_tree);
 
         if (!text_input.wlr_text_input.current.features.cursor_rectangle) {
             // If the text-input client does not inform us where in the surface
@@ -440,7 +445,7 @@ const Popup = struct {
 
         var focused_x: c_int = undefined;
         var focused_y: c_int = undefined;
-        _ = scene_node.coords(&focused_x, &focused_y);
+        _ = focused_wlr_scene_node.coords(&focused_x, &focused_y);
 
         var output_box: wlr.Box = undefined;
         server.output_layout.getBox(wlr_output, &output_box);

@@ -208,7 +208,7 @@ pub const Tool = struct {
 
                 self.wp_tool.notifyDown();
 
-                if (server.toplevelAt(wlr_cursor.x, wlr_cursor.y)) |result| {
+                if (server.resultAt(wlr_cursor.x, wlr_cursor.y)) |result| {
                     self.mode = .{
                         .down = .{
                             .lx = wlr_cursor.x,
@@ -250,10 +250,13 @@ pub const Tool = struct {
     fn passthrough(self: *Tool, tablet: *hwc.input.Tablet) void {
         const wlr_cursor = server.input_manager.defaultSeat().cursor.wlr_cursor;
 
-        if (server.toplevelAt(wlr_cursor.x, wlr_cursor.y)) |result| {
-            self.wp_tool.notifyProximityIn(tablet.wp_tablet, result.surface);
-            self.wp_tool.notifyMotion(result.sx, result.sy);
-            return;
+        if (server.resultAt(wlr_cursor.x, wlr_cursor.y)) |result| {
+            if (result.wlr_surface) |wlr_surface| {
+                self.wp_tool.notifyProximityIn(tablet.wp_tablet, wlr_surface);
+                self.wp_tool.notifyMotion(result.sx, result.sy);
+
+                return;
+            }
         } else {
             wlr_cursor.setXcursor(server.input_manager.defaultSeat().cursor.xcursor_manager, "pencil");
         }
