@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.xdgtoplevel);
+const log = std.log.scoped(.xdg_toplevel);
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
@@ -13,6 +13,7 @@ const server = &@import("root").server;
 link: wl.list.Link = undefined,
 xdg_toplevel: *wlr.XdgToplevel,
 scene_tree: *wlr.SceneTree,
+popup_scene_tree: *wlr.SceneTree,
 geometry: wlr.Box = undefined,
 previous_geometry: wlr.Box = undefined,
 decoration: ?hwc.XdgDecoration = null,
@@ -38,18 +39,19 @@ request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
     wl.Listener(*wlr.XdgToplevel.event.Resize).init(handleResize),
 
 pub fn create(wlr_toplevel: *wlr.XdgToplevel) error{OutOfMemory}!void {
-    const toplevel = util.allocator.create(hwc.XdgToplevel) catch {
-        log.err("failed to allocate new toplevel", .{});
-        return error.OutOfMemory;
-    };
+    const toplevel = try util.allocator.create(hwc.XdgToplevel);
+    errdefer util.allocator.destroy(toplevel);
+
+    const scene_tree = try server.scene.tree.createSceneXdgSurface(wlr_toplevel.base);
+    errdefer scene_tree.node.destroy();
+
+    const popup_scene_tree = try scene_tree.createSceneTree();
+    errdefer popup_scene_tree.node.destroy();
 
     toplevel.* = .{
         .xdg_toplevel = wlr_toplevel,
-        .scene_tree = server.scene.tree.createSceneXdgSurface(wlr_toplevel.base) catch {
-            util.allocator.destroy(toplevel);
-            log.err("failed to allocate new toplevel", .{});
-            return error.OutOfMemory;
-        },
+        .scene_tree = scene_tree,
+        .popup_scene_tree = popup_scene_tree,
     };
 
     const focusable = try util.allocator.create(hwc.Focusable);
@@ -262,10 +264,16 @@ fn requestFullscreen(listener: *wl.Listener(void)) void {
 }
 
 fn handleNewPopup(
-    _: *wl.Listener(*wlr.XdgPopup),
+    listener: *wl.Listener(*wlr.XdgPopup),
     wlr_xdg_popup: *wlr.XdgPopup,
 ) void {
-    hwc.XdgPopup.create(wlr_xdg_popup) catch {
+    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("new_popup", listener);
+
+    hwc.XdgPopup.create(
+        wlr_xdg_popup,
+        toplevel.popup_scene_tree,
+        toplevel.popup_scene_tree,
+    ) catch {
         wlr_xdg_popup.resource.postNoMemory();
         return;
     };

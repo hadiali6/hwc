@@ -431,8 +431,12 @@ const Popup = struct {
             .none => unreachable,
         };
 
-        // TODO: popup tree
-        // self.surface_tree.node.reparent(topelvel.scene_tree);
+        const popup_scene_tree: *wlr.SceneTree = switch (focusable.*) {
+            .toplevel => |toplevel| toplevel.popup_scene_tree,
+            .none => unreachable,
+        };
+
+        self.surface_tree.node.reparent(popup_scene_tree);
 
         if (!text_input.wlr_text_input.current.features.cursor_rectangle) {
             // If the text-input client does not inform us where in the surface
