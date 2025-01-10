@@ -138,6 +138,19 @@ fn handleSceneNodeDestroy(listener: *wl.Listener(void)) void {
 fn handleToplevelDestroy(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.XdgToplevel = @fieldParentPtr("toplevel_destroy", listener);
 
+    {
+        var iterator = server.input_manager.seats.iterator(.forward);
+        while (iterator.next()) |seat| {
+            if (seat.focused != .toplevel) {
+                continue;
+            }
+
+            if (seat.focused.toplevel == toplevel) {
+                seat.focus(.none);
+            }
+        }
+    }
+
     toplevel.commit.link.remove();
     toplevel.map.link.remove();
     toplevel.unmap.link.remove();
