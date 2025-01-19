@@ -30,6 +30,8 @@ wlr_renderer: *wlr.Renderer,
 wlr_allocator: *wlr.Allocator,
 wlr_shm: *wlr.Shm,
 
+renderer_lost: wl.Listener(void) = wl.Listener(void).init(handleRendererLost),
+
 wlr_drm: ?*wlr.Drm = null,
 wlr_linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
 
@@ -124,6 +126,7 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
     self.all_outputs.init();
 
     wlr_backend.events.new_output.add(&self.new_output);
+    wlr_renderer.events.lost.add(&self.renderer_lost);
 
     wl_server.setGlobalFilter(*hwc.Server, handleGlobalFilter, self);
 
@@ -135,6 +138,7 @@ pub fn deinit(self: *hwc.Server) void {
     self.sigterm_source.remove();
 
     self.new_output.link.remove();
+    self.renderer_lost.link.remove();
 
     self.wl_server.destroyClients();
 
@@ -236,4 +240,36 @@ fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output)
     };
 
     log.info("{s}: '{s}'", .{ @src().fn_name, wlr_output.name });
+}
+
+fn handleRendererLost(listener: *wl.Listener(void)) void {
+    const server: *hwc.Server = @fieldParentPtr("renderer_lost", listener);
+
+    const new_renderer = wlr.Renderer.autocreate(server.wlr_backend) catch {
+        log.err("{s}: failed to create new renderer after GPU reset", .{@src().fn_name});
+        return;
+    };
+
+    const new_allocator = wlr.Allocator.autocreate(server.wlr_backend, server.wlr_renderer) catch {
+        new_renderer.destroy();
+        log.err("{s}: failed to create new allocator after GPU reset", .{@src().fn_name});
+        return;
+    };
+
+    server.renderer_lost.link.remove();
+    new_renderer.events.lost.add(&server.renderer_lost);
+
+    server.wlr_compositor.setRenderer(new_renderer);
+    {
+        var it = server.all_outputs.iterator(.forward);
+        while (it.next()) |output| {
+            _ = output.wlr_output.initRender(new_allocator, new_renderer);
+        }
+    }
+
+    server.wlr_renderer.destroy();
+    server.wlr_renderer = new_renderer;
+
+    server.wlr_allocator.destroy();
+    server.wlr_allocator = new_allocator;
 }
