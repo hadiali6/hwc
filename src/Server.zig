@@ -43,6 +43,9 @@ wlr_compositor: *wlr.Compositor,
 wlr_subcompositor: *wlr.Subcompositor,
 wlr_data_device_manager: *wlr.DataDeviceManager,
 
+wlr_xdg_shell: *wlr.XdgShell,
+new_toplevel: wl.Listener(*wlr.XdgToplevel) = wl.Listener(*wlr.XdgToplevel).init(handleNewToplevel),
+
 wlr_alpha_modifier: *wlr.AlphaModifierV1,
 wlr_content_type_manager: *wlr.ContentTypeManagerV1,
 wlr_data_control_manager: *wlr.DataControlManagerV1,
@@ -102,6 +105,8 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
         .wlr_subcompositor = try wlr.Subcompositor.create(wl_server),
         .wlr_data_device_manager = try wlr.DataDeviceManager.create(wl_server),
 
+        .wlr_xdg_shell = try wlr.XdgShell.create(wl_server, 6),
+
         .wlr_alpha_modifier = try wlr.AlphaModifierV1.create(wl_server),
         .wlr_data_control_manager = try wlr.DataControlManagerV1.create(wl_server),
         .wlr_export_dmabuf_manager = try wlr.ExportDmabufManagerV1.create(wl_server),
@@ -127,6 +132,7 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
 
     wlr_backend.events.new_output.add(&self.new_output);
     wlr_renderer.events.lost.add(&self.renderer_lost);
+    self.wlr_xdg_shell.events.new_toplevel.add(&self.new_toplevel);
 
     wl_server.setGlobalFilter(*hwc.Server, handleGlobalFilter, self);
 
@@ -272,4 +278,18 @@ fn handleRendererLost(listener: *wl.Listener(void)) void {
 
     server.wlr_allocator.destroy();
     server.wlr_allocator = new_allocator;
+}
+
+fn handleNewToplevel(
+    listener: *wl.Listener(*wlr.XdgToplevel),
+    wlr_xdg_toplevel: *wlr.XdgToplevel,
+) void {
+    const server: *hwc.Server = @fieldParentPtr("new_toplevel", listener);
+
+    hwc.XdgToplevel.create(server.allocator, wlr_xdg_toplevel) catch |err| {
+        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        if (err == error.OutOfMemory) {
+            wlr_xdg_toplevel.resource.postNoMemory();
+        }
+    };
 }
