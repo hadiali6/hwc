@@ -17,8 +17,8 @@ allocator: mem.Allocator,
 
 wl_server: *wl.Server,
 
-sigint_source: *wl.EventSource,
-sigterm_source: *wl.EventSource,
+sig_interrupt_source: *wl.EventSource,
+sig_terminate_source: *wl.EventSource,
 
 wlr_backend: *wlr.Backend,
 wlr_session: ?*wlr.Session,
@@ -37,7 +37,6 @@ wlr_linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
 
 wlr_scene: *wlr.Scene,
 wlr_output_layout: *wlr.OutputLayout,
-wlr_scene_output_layout: *wlr.SceneOutputLayout,
 
 wlr_compositor: *wlr.Compositor,
 wlr_subcompositor: *wlr.Subcompositor,
@@ -60,8 +59,6 @@ wlr_viewporter: *wlr.Viewporter,
 wlr_xdg_output_manager: *wlr.XdgOutputManagerV1,
 
 pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
-    wlr.log.init(.info, null);
-
     const wl_server = try wl.Server.create();
     const wl_event_loop = wl_server.getEventLoop();
 
@@ -76,13 +73,13 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
         .allocator = allocator,
         .wl_server = wl_server,
 
-        .sigint_source = try wl_event_loop.addSignal(
+        .sig_interrupt_source = try wl_event_loop.addSignal(
             *wl.Server,
             posix.SIG.INT,
             handleDestroySingals,
             wl_server,
         ),
-        .sigterm_source = try wl_event_loop.addSignal(
+        .sig_terminate_source = try wl_event_loop.addSignal(
             *wl.Server,
             posix.SIG.TERM,
             handleDestroySingals,
@@ -99,7 +96,6 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
 
         .wlr_scene = wlr_scene,
         .wlr_output_layout = wlr_output_layout,
-        .wlr_scene_output_layout = try wlr_scene.attachOutputLayout(wlr_output_layout),
 
         .wlr_compositor = try wlr.Compositor.create(wl_server, 6, wlr_renderer),
         .wlr_subcompositor = try wlr.Subcompositor.create(wl_server),
