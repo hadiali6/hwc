@@ -23,6 +23,9 @@ sigterm_source: *wl.EventSource,
 wlr_backend: *wlr.Backend,
 wlr_session: ?*wlr.Session,
 
+all_outputs: wl.list.Head(hwc.Output, .link),
+new_output: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleNewOutput),
+
 wlr_renderer: *wlr.Renderer,
 wlr_allocator: *wlr.Allocator,
 wlr_shm: *wlr.Shm,
@@ -36,11 +39,11 @@ wlr_scene_output_layout: *wlr.SceneOutputLayout,
 
 wlr_compositor: *wlr.Compositor,
 wlr_subcompositor: *wlr.Subcompositor,
+wlr_data_device_manager: *wlr.DataDeviceManager,
 
 wlr_alpha_modifier: *wlr.AlphaModifierV1,
 wlr_content_type_manager: *wlr.ContentTypeManagerV1,
 wlr_data_control_manager: *wlr.DataControlManagerV1,
-wlr_data_device_manager: *wlr.DataDeviceManager,
 wlr_export_dmabuf_manager: *wlr.ExportDmabufManagerV1,
 wlr_fractional_scale_manager: *wlr.FractionalScaleManagerV1,
 wlr_presentation: *wlr.Presentation,
@@ -83,6 +86,7 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
 
         .wlr_backend = wlr_backend,
         .wlr_session = wlr_session,
+        .all_outputs = undefined,
 
         .wlr_renderer = wlr_renderer,
         .wlr_allocator = try wlr.Allocator.autocreate(wlr_backend, wlr_renderer),
@@ -94,10 +98,10 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
 
         .wlr_compositor = try wlr.Compositor.create(wl_server, 6, wlr_renderer),
         .wlr_subcompositor = try wlr.Subcompositor.create(wl_server),
+        .wlr_data_device_manager = try wlr.DataDeviceManager.create(wl_server),
 
         .wlr_alpha_modifier = try wlr.AlphaModifierV1.create(wl_server),
         .wlr_data_control_manager = try wlr.DataControlManagerV1.create(wl_server),
-        .wlr_data_device_manager = try wlr.DataDeviceManager.create(wl_server),
         .wlr_export_dmabuf_manager = try wlr.ExportDmabufManagerV1.create(wl_server),
         .wlr_fractional_scale_manager = try wlr.FractionalScaleManagerV1.create(wl_server, 1),
         .wlr_presentation = try wlr.Presentation.create(wl_server, wlr_backend),
@@ -117,6 +121,10 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
             try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, wlr_renderer);
     }
 
+    self.all_outputs.init();
+
+    wlr_backend.events.new_output.add(&self.new_output);
+
     wl_server.setGlobalFilter(*hwc.Server, handleGlobalFilter, self);
 
     log.info("{s}", .{@src().fn_name});
@@ -125,6 +133,8 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
 pub fn deinit(self: *hwc.Server) void {
     self.sigint_source.remove();
     self.sigterm_source.remove();
+
+    self.new_output.link.remove();
 
     self.wl_server.destroyClients();
 
@@ -138,6 +148,7 @@ pub fn deinit(self: *hwc.Server) void {
     self.wl_server.destroy();
 
     log.info("{s}", .{@src().fn_name});
+    assert(self.all_outputs.empty());
 }
 
 pub fn start(self: *hwc.Server) !void {
@@ -214,4 +225,15 @@ fn handleDestroySingals(signal: c_int, wl_server: *wl.Server) c_int {
     wl_server.terminate();
 
     return 0;
+}
+
+fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
+    const server: *hwc.Server = @fieldParentPtr("new_output", listener);
+
+    hwc.Output.create(server.allocator, wlr_output) catch |err| {
+        log.err("{s} failed: '{s}' {}", .{ @src().fn_name, wlr_output.name, err });
+        wlr_output.destroy();
+    };
+
+    log.info("{s}: '{s}'", .{ @src().fn_name, wlr_output.name });
 }

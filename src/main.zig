@@ -1,5 +1,6 @@
 const std = @import("std");
 
+pub const Output = @import("Output.zig");
 pub const Server = @import("Server.zig");
 
 const api = @import("api.zig");
