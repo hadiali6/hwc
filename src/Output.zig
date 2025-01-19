@@ -90,16 +90,16 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
     wlr_output.events.frame.add(&output.frame);
     wlr_output.events.request_state.add(&output.request_state);
 
-    _ = try server.wlr_output_layout.addAuto(wlr_output);
-    errdefer server.wlr_output_layout.remove(wlr_output);
+    _ = try server.output_manager.wlr_output_layout.addAuto(wlr_output);
+    errdefer server.output_manager.wlr_output_layout.remove(wlr_output);
 
-    server.all_outputs.prepend(output);
+    server.output_manager.outputs.prepend(output);
 }
 
 fn handleDestroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
     const output: *hwc.Output = @fieldParentPtr("destroy", listener);
 
-    server.wlr_output_layout.remove(wlr_output);
+    server.output_manager.wlr_output_layout.remove(wlr_output);
 
     output.destroy.link.remove();
     output.frame.link.remove();

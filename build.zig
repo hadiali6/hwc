@@ -10,6 +10,8 @@ pub fn build(b: *std.Build) void {
 
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
 
+    scanner.addCustomProtocol(b.path("protocol/wlr-output-power-management-unstable-v1.xml"));
+
     scanner.generate("wl_compositor", 6);
     scanner.generate("wl_subcompositor", 1);
     scanner.generate("wl_shm", 2);
@@ -18,6 +20,8 @@ pub fn build(b: *std.Build) void {
     scanner.generate("wl_data_device_manager", 3);
 
     scanner.generate("xdg_wm_base", 6);
+
+    scanner.generate("zwlr_output_power_manager_v1", 1);
 
     const wayland_bindings = b.createModule(.{ .root_source_file = scanner.result });
     const wlroots_bindings = b.dependency("zig-wlroots", .{}).module("wlroots");

@@ -3,6 +3,7 @@ const std = @import("std");
 const wlr = @import("wlroots");
 
 pub const Output = @import("Output.zig");
+pub const OutputManager = @import("OutputManager.zig");
 pub const Server = @import("Server.zig");
 pub const XdgPopup = @import("XdgPopup.zig");
 pub const XdgToplevel = @import("XdgToplevel.zig");
