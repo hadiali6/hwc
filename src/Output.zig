@@ -16,7 +16,7 @@ wlr_output: *wlr.Output,
 wlr_scene_output: *wlr.SceneOutput,
 
 destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleDestroy),
-frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(frame),
+frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleFrame),
 request_state: wl.Listener(*wlr.Output.event.RequestState) =
     wl.Listener(*wlr.Output.event.RequestState).init(handleRequestState),
 
@@ -52,23 +52,26 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
 
         const commit_successful = wlr_output.commitState(&state);
         if (!commit_successful) {
-            log.err("initial output commit with preferred mode failed, trying all modes", .{});
-            var iterator = wlr_output.modes.iterator(.forward);
-            while (iterator.next()) |mode| {
+            log.err(
+                "{s}: initial output commit with preferred mode failed, trying all modes",
+                .{@src().fn_name},
+            );
+
+            var it = wlr_output.modes.iterator(.forward);
+            while (it.next()) |mode| {
                 state.setMode(mode);
+
                 if (wlr_output.commitState(&state)) {
-                    log.info("initial output commit succeeded with mode {}x{}@{}mHz", .{
-                        mode.width,
-                        mode.height,
-                        mode.refresh,
-                    });
+                    log.info(
+                        "{s}: initial output commit succeeded with mode {}x{}@{}mHz",
+                        .{ @src().fn_name, mode.width, mode.height, mode.refresh },
+                    );
                     break;
                 } else {
-                    log.err("initial output commit failed with mode {}x{}@{}mHz", .{
-                        mode.width,
-                        mode.height,
-                        mode.refresh,
-                    });
+                    log.err(
+                        "{s}: initial output commit failed with mode {}x{}@{}mHz",
+                        .{ @src().fn_name, mode.width, mode.height, mode.refresh },
+                    );
                 }
             }
         }
@@ -87,10 +90,9 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
     wlr_output.events.frame.add(&output.frame);
     wlr_output.events.request_state.add(&output.request_state);
 
-    const wlr_layout_output = try server.wlr_output_layout.addAuto(wlr_output);
+    _ = try server.wlr_output_layout.addAuto(wlr_output);
     errdefer server.wlr_output_layout.remove(wlr_output);
 
-    server.wlr_scene_output_layout.addOutput(wlr_layout_output, wlr_scene_output);
     server.all_outputs.prepend(output);
 }
 
@@ -109,7 +111,7 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) v
     log.debug("{s}: '{s}'", .{ @src().fn_name, wlr_output.name });
 }
 
-fn frame(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
+fn handleFrame(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
     const wlr_scene_output = server.wlr_scene.getSceneOutput(wlr_output).?;
 
     _ = blk: {

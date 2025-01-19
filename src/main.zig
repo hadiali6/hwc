@@ -2,8 +2,8 @@ const std = @import("std");
 
 pub const Output = @import("Output.zig");
 pub const Server = @import("Server.zig");
-pub const XdgToplevel = @import("XdgToplevel.zig");
 pub const XdgPopup = @import("XdgPopup.zig");
+pub const XdgToplevel = @import("XdgToplevel.zig");
 
 const api = @import("api.zig");
 
