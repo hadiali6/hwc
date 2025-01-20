@@ -49,8 +49,8 @@ wlr_security_context_manager: *wlr.SecurityContextManagerV1,
 wlr_single_pixel_buffer_manager: *wlr.SinglePixelBufferManagerV1,
 wlr_viewporter: *wlr.Viewporter,
 
-output_manager: hwc.OutputManager,
-surface_manager: hwc.SurfaceManager,
+output_manager: hwc.desktop.OutputManager,
+surface_manager: hwc.desktop.SurfaceManager,
 
 pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
     const wl_server = try wl.Server.create();

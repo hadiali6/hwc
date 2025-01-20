@@ -34,7 +34,7 @@ set_title: wl.Listener(void) = wl.Listener(void).init(handleSetTitle),
 set_app_id: wl.Listener(void) = wl.Listener(void).init(handleSetAppId),
 
 pub fn create(allocator: mem.Allocator, wlr_xdg_toplevel: *wlr.XdgToplevel) !void {
-    const toplevel = try allocator.create(hwc.XdgToplevel);
+    const toplevel = try allocator.create(hwc.desktop.XdgToplevel);
     errdefer allocator.destroy(toplevel);
 
     const surface_tree = try server.wlr_scene.tree.createSceneTree();
@@ -62,7 +62,7 @@ pub fn create(allocator: mem.Allocator, wlr_xdg_toplevel: *wlr.XdgToplevel) !voi
     wlr_xdg_toplevel.base.events.new_popup.add(&toplevel.new_popup);
 }
 
-fn destroyPopups(self: *hwc.XdgToplevel) void {
+fn destroyPopups(self: *hwc.desktop.XdgToplevel) void {
     var it = self.wlr_xdg_toplevel.base.popups.safeIterator(.forward);
     while (it.next()) |wlr_xdg_popup| {
         wlr_xdg_popup.destroy();
@@ -70,7 +70,7 @@ fn destroyPopups(self: *hwc.XdgToplevel) void {
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("destroy", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("destroy", listener);
 
     toplevel.destroyPopups();
 
@@ -87,7 +87,7 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 }
 
 fn handleMap(listener: *wl.Listener(void)) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("map", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("map", listener);
     _ = toplevel.wlr_xdg_toplevel.setActivated(true);
 
     // add listeners that are only active while mapped
@@ -102,7 +102,7 @@ fn handleMap(listener: *wl.Listener(void)) void {
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("unmap", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("unmap", listener);
     _ = toplevel.wlr_xdg_toplevel.setActivated(false);
 
     // remove listeners that are only active while mapped
@@ -117,7 +117,7 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
 }
 
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("commit", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("commit", listener);
 
     if (toplevel.wlr_xdg_toplevel.base.initial_commit) {
         _ = toplevel.wlr_xdg_toplevel.setSize(0, 0);
@@ -125,9 +125,9 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
 }
 
 fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.XdgPopup) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("new_popup", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("new_popup", listener);
 
-    hwc.XdgPopup.create(
+    hwc.desktop.XdgPopup.create(
         server.allocator,
         wlr_xdg_popup,
         toplevel.popup_tree,
@@ -142,23 +142,23 @@ fn handleAckConfigure(
     listener: *wl.Listener(*wlr.XdgSurface.Configure),
     event: *wlr.XdgSurface.Configure,
 ) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("ack_configure", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("ack_configure", listener);
     _ = toplevel;
     _ = event;
 }
 
 fn handleRequestFullscreen(listener: *wl.Listener(void)) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_fullscreen", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_fullscreen", listener);
     _ = toplevel;
 }
 
 fn handleRequestMaximize(listener: *wl.Listener(void)) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_maximize", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_maximize", listener);
     _ = toplevel;
 }
 
 fn handleRequestMinimize(listener: *wl.Listener(void)) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_minimize", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_minimize", listener);
     _ = toplevel;
 }
 
@@ -166,7 +166,7 @@ fn handleRequestMove(
     listener: *wl.Listener(*wlr.XdgToplevel.event.Move),
     event: *wlr.XdgToplevel.event.Move,
 ) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_move", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_move", listener);
     _ = toplevel;
     _ = event;
 }
@@ -175,17 +175,17 @@ fn handleRequestResize(
     listener: *wl.Listener(*wlr.XdgToplevel.event.Resize),
     event: *wlr.XdgToplevel.event.Resize,
 ) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("request_resize", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_resize", listener);
     _ = toplevel;
     _ = event;
 }
 
 fn handleSetTitle(listener: *wl.Listener(void)) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("set_title", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("set_title", listener);
     _ = toplevel;
 }
 
 fn handleSetAppId(listener: *wl.Listener(void)) void {
-    const toplevel: *hwc.XdgToplevel = @fieldParentPtr("set_app_id", listener);
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("set_app_id", listener);
     _ = toplevel;
 }

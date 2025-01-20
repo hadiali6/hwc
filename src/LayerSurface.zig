@@ -13,7 +13,7 @@ const server = &hwc.server;
 wlr_layer_surface: *wlr.LayerSurfaceV1,
 wlr_scene_layer_surface: *wlr.SceneLayerSurfaceV1,
 
-output: *hwc.Output,
+output: *hwc.desktop.Output,
 
 popup_tree: *wlr.SceneTree,
 
@@ -24,9 +24,9 @@ unmap: wl.Listener(void) = wl.Listener(void).init(handleUnmap),
 commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(handleCommit),
 
 pub fn create(allocator: mem.Allocator, wlr_layer_surface: *wlr.LayerSurfaceV1) !void {
-    const output: *hwc.Output = @ptrFromInt(wlr_layer_surface.output.?.data);
+    const output: *hwc.desktop.Output = @ptrFromInt(wlr_layer_surface.output.?.data);
 
-    const layer_surface = try allocator.create(hwc.LayerSurface);
+    const layer_surface = try allocator.create(hwc.desktop.LayerSurface);
     errdefer allocator.destroy(layer_surface);
 
     const scene_tree = output.layerSurfaceTree(wlr_layer_surface.current.layer);
@@ -45,7 +45,7 @@ pub fn create(allocator: mem.Allocator, wlr_layer_surface: *wlr.LayerSurfaceV1) 
     wlr_layer_surface.surface.events.commit.add(&layer_surface.commit);
 }
 
-fn destroyPopups(self: *hwc.LayerSurface) void {
+fn destroyPopups(self: *hwc.desktop.LayerSurface) void {
     var it = self.wlr_layer_surface.popups.safeIterator(.forward);
     while (it.next()) |wlr_xdg_popup| {
         wlr_xdg_popup.destroy();
@@ -53,7 +53,7 @@ fn destroyPopups(self: *hwc.LayerSurface) void {
 }
 
 fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfaceV1) void {
-    const layer_surface: *hwc.LayerSurface = @fieldParentPtr("destroy", listener);
+    const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("destroy", listener);
 
     layer_surface.destroyPopups();
 
@@ -71,9 +71,9 @@ fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfa
 }
 
 fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.XdgPopup) void {
-    const layer_surface: *hwc.LayerSurface = @fieldParentPtr("new_popup", listener);
+    const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("new_popup", listener);
 
-    hwc.XdgPopup.create(
+    hwc.desktop.XdgPopup.create(
         server.allocator,
         wlr_xdg_popup,
         layer_surface.popup_tree,
@@ -85,16 +85,16 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.Xdg
 }
 
 fn handleMap(listener: *wl.Listener(void)) void {
-    const layer_surface: *hwc.LayerSurface = @fieldParentPtr("map", listener);
+    const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("map", listener);
     _ = layer_surface;
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
-    const layer_surface: *hwc.LayerSurface = @fieldParentPtr("unmap", listener);
+    const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("unmap", listener);
     _ = layer_surface;
 }
 
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
-    const layer_surface: *hwc.LayerSurface = @fieldParentPtr("commit", listener);
+    const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("commit", listener);
     _ = layer_surface;
 }

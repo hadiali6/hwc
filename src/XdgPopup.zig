@@ -24,7 +24,7 @@ pub fn create(
     root_tree: *wlr.SceneTree,
     parent_tree: *wlr.SceneTree,
 ) !void {
-    const popup = try allocator.create(hwc.XdgPopup);
+    const popup = try allocator.create(hwc.desktop.XdgPopup);
     errdefer allocator.destroy(popup);
 
     popup.* = .{
@@ -40,7 +40,7 @@ pub fn create(
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {
-    const popup: *hwc.XdgPopup = @fieldParentPtr("destroy", listener);
+    const popup: *hwc.desktop.XdgPopup = @fieldParentPtr("destroy", listener);
 
     popup.commit.link.remove();
     popup.destroy.link.remove();
@@ -49,21 +49,21 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 }
 
 fn handleReposition(listener: *wl.Listener(void)) void {
-    const popup: *hwc.XdgPopup = @fieldParentPtr("reposition", listener);
+    const popup: *hwc.desktop.XdgPopup = @fieldParentPtr("reposition", listener);
     _ = popup;
 }
 
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
-    const popup: *hwc.XdgPopup = @fieldParentPtr("commit", listener);
+    const popup: *hwc.desktop.XdgPopup = @fieldParentPtr("commit", listener);
     if (popup.wlr_xdg_popup.base.initial_commit) {
         _ = popup.wlr_xdg_popup.base.scheduleConfigure();
     }
 }
 
 fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.XdgPopup) void {
-    const popup: *hwc.XdgPopup = @fieldParentPtr("new_popup", listener);
+    const popup: *hwc.desktop.XdgPopup = @fieldParentPtr("new_popup", listener);
 
-    hwc.XdgPopup.create(
+    hwc.desktop.XdgPopup.create(
         server.allocator,
         wlr_xdg_popup,
         popup.root_tree,

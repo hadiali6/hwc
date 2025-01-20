@@ -30,7 +30,7 @@ request_state: wl.Listener(*wlr.Output.event.RequestState) =
     wl.Listener(*wlr.Output.event.RequestState).init(handleRequestState),
 
 pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
-    const output = try allocator.create(hwc.Output);
+    const output = try allocator.create(hwc.desktop.Output);
     errdefer allocator.destroy(output);
 
     {
@@ -122,7 +122,7 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
     server.output_manager.outputs.prepend(output);
 }
 
-pub fn layerSurfaceTree(self: hwc.Output, layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
+pub fn layerSurfaceTree(self: hwc.desktop.Output, layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
     return switch (layer) {
         .background => self.layers.background,
         .bottom => self.layers.bottom,
@@ -133,7 +133,7 @@ pub fn layerSurfaceTree(self: hwc.Output, layer: zwlr.LayerShellV1.Layer) *wlr.S
 }
 
 fn handleDestroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
-    const output: *hwc.Output = @fieldParentPtr("destroy", listener);
+    const output: *hwc.desktop.Output = @fieldParentPtr("destroy", listener);
 
     for ([_]zwlr.LayerShellV1.Layer{ .overlay, .top, .bottom, .background }) |layer| {
         const tree = output.layerSurfaceTree(layer);

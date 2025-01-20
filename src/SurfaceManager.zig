@@ -17,7 +17,7 @@ new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) =
 
 wlr_foreign_toplevel_manager: *wlr.ForeignToplevelManagerV1,
 
-pub fn init(self: *hwc.SurfaceManager) !void {
+pub fn init(self: *hwc.desktop.SurfaceManager) !void {
     self.* = .{
         .wlr_xdg_shell = try wlr.XdgShell.create(server.wl_server, 6),
         .wlr_layer_shell = try wlr.LayerShellV1.create(server.wl_server, 4),
@@ -27,7 +27,7 @@ pub fn init(self: *hwc.SurfaceManager) !void {
     self.wlr_xdg_shell.events.new_toplevel.add(&self.new_toplevel);
     self.wlr_layer_shell.events.new_surface.add(&self.new_layer_surface);
 }
-pub fn deinit(self: *hwc.SurfaceManager) void {
+pub fn deinit(self: *hwc.desktop.SurfaceManager) void {
     self.new_toplevel.link.remove();
     self.new_layer_surface.link.remove();
 }
@@ -36,7 +36,7 @@ fn handleNewToplevel(
     _: *wl.Listener(*wlr.XdgToplevel),
     wlr_xdg_toplevel: *wlr.XdgToplevel,
 ) void {
-    hwc.XdgToplevel.create(server.allocator, wlr_xdg_toplevel) catch |err| {
+    hwc.desktop.XdgToplevel.create(server.allocator, wlr_xdg_toplevel) catch |err| {
         log.err("{s} failed: {}", .{ @src().fn_name, err });
 
         if (err == error.OutOfMemory) {
@@ -49,7 +49,7 @@ fn handleNewLayerSurface(
     _: *wl.Listener(*wlr.LayerSurfaceV1),
     wlr_layer_surface: *wlr.LayerSurfaceV1,
 ) void {
-    hwc.LayerSurface.create(server.allocator, wlr_layer_surface) catch |err| {
+    hwc.desktop.LayerSurface.create(server.allocator, wlr_layer_surface) catch |err| {
         log.err("{s} failed: {}", .{ @src().fn_name, err });
 
         if (err == error.OutOfMemory) {

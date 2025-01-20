@@ -2,13 +2,16 @@ const std = @import("std");
 
 const wlr = @import("wlroots");
 
-pub const LayerSurface = @import("LayerSurface.zig");
-pub const Output = @import("Output.zig");
-pub const OutputManager = @import("OutputManager.zig");
 pub const Server = @import("Server.zig");
-pub const SurfaceManager = @import("SurfaceManager.zig");
-pub const XdgPopup = @import("XdgPopup.zig");
-pub const XdgToplevel = @import("XdgToplevel.zig");
+
+pub const desktop = struct {
+    pub const LayerSurface = @import("LayerSurface.zig");
+    pub const Output = @import("Output.zig");
+    pub const OutputManager = @import("OutputManager.zig");
+    pub const SurfaceManager = @import("SurfaceManager.zig");
+    pub const XdgPopup = @import("XdgPopup.zig");
+    pub const XdgToplevel = @import("XdgToplevel.zig");
+};
 
 const api = @import("api.zig");
 
