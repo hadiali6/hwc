@@ -6,6 +6,7 @@ const posix = std.posix;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
+const zwlr = wayland.server.zwlr;
 const wlr = @import("wlroots");
 
 const hwc = @import("root");
@@ -14,6 +15,14 @@ const server = &hwc.server;
 link: wl.list.Link,
 wlr_output: *wlr.Output,
 wlr_scene_output: *wlr.SceneOutput,
+
+layers: struct {
+    background: *wlr.SceneTree,
+    bottom: *wlr.SceneTree, // TODO: layer(s) for windows
+    top: *wlr.SceneTree,
+    overlay: *wlr.SceneTree,
+    popups: *wlr.SceneTree,
+},
 
 destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleDestroy),
 frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleFrame),
@@ -84,7 +93,24 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
         .link = undefined,
         .wlr_output = wlr_output,
         .wlr_scene_output = wlr_scene_output,
+
+        .layers = .{
+            .background = try server.wlr_scene.tree.createSceneTree(),
+            .bottom = try server.wlr_scene.tree.createSceneTree(),
+            .top = try server.wlr_scene.tree.createSceneTree(),
+            .overlay = try server.wlr_scene.tree.createSceneTree(),
+            .popups = try server.wlr_scene.tree.createSceneTree(),
+        },
     };
+    errdefer {
+        output.layers.background.node.destroy();
+        output.layers.bottom.node.destroy();
+        output.layers.top.node.destroy();
+        output.layers.overlay.node.destroy();
+        output.layers.popups.node.destroy();
+    }
+
+    wlr_output.data = @intFromPtr(output);
 
     wlr_output.events.destroy.add(&output.destroy);
     wlr_output.events.frame.add(&output.frame);
@@ -96,8 +122,23 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
     server.output_manager.outputs.prepend(output);
 }
 
+pub fn layerSurfaceTree(self: hwc.Output, layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
+    return switch (layer) {
+        .background => self.layers.background,
+        .bottom => self.layers.bottom,
+        .top => self.layers.top,
+        .overlay => self.layers.overlay,
+        else => unreachable,
+    };
+}
+
 fn handleDestroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
     const output: *hwc.Output = @fieldParentPtr("destroy", listener);
+
+    for ([_]zwlr.LayerShellV1.Layer{ .overlay, .top, .bottom, .background }) |layer| {
+        const tree = output.layerSurfaceTree(layer);
+        tree.node.destroy();
+    }
 
     server.output_manager.wlr_output_layout.remove(wlr_output);
 

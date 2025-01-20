@@ -10,6 +10,7 @@ pub fn build(b: *std.Build) void {
 
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
 
+    scanner.addCustomProtocol(b.path("protocol/wlr-layer-shell-unstable-v1.xml"));
     scanner.addCustomProtocol(b.path("protocol/wlr-output-power-management-unstable-v1.xml"));
 
     scanner.generate("wl_compositor", 6);
@@ -21,6 +22,7 @@ pub fn build(b: *std.Build) void {
 
     scanner.generate("xdg_wm_base", 6);
 
+    scanner.generate("zwlr_layer_shell_v1", 5);
     scanner.generate("zwlr_output_power_manager_v1", 1);
 
     const wayland_bindings = b.createModule(.{ .root_source_file = scanner.result });

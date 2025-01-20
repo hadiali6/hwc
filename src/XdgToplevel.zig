@@ -40,6 +40,7 @@ pub fn create(allocator: mem.Allocator, wlr_xdg_toplevel: *wlr.XdgToplevel) !voi
     const surface_tree = try server.wlr_scene.tree.createSceneTree();
     errdefer surface_tree.node.destroy();
 
+    // TODO: use current outputs popup layer
     const popup_tree = try server.wlr_scene.tree.createSceneTree();
     errdefer popup_tree.node.destroy();
 

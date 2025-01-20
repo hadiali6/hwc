@@ -38,9 +38,6 @@ wlr_compositor: *wlr.Compositor,
 wlr_subcompositor: *wlr.Subcompositor,
 wlr_data_device_manager: *wlr.DataDeviceManager,
 
-wlr_xdg_shell: *wlr.XdgShell,
-new_toplevel: wl.Listener(*wlr.XdgToplevel) = wl.Listener(*wlr.XdgToplevel).init(handleNewToplevel),
-
 wlr_alpha_modifier: *wlr.AlphaModifierV1,
 wlr_content_type_manager: *wlr.ContentTypeManagerV1,
 wlr_data_control_manager: *wlr.DataControlManagerV1,
@@ -53,6 +50,7 @@ wlr_single_pixel_buffer_manager: *wlr.SinglePixelBufferManagerV1,
 wlr_viewporter: *wlr.Viewporter,
 
 output_manager: hwc.OutputManager,
+surface_manager: hwc.SurfaceManager,
 
 pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
     const wl_server = try wl.Server.create();
@@ -93,8 +91,6 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
         .wlr_subcompositor = try wlr.Subcompositor.create(wl_server),
         .wlr_data_device_manager = try wlr.DataDeviceManager.create(wl_server),
 
-        .wlr_xdg_shell = try wlr.XdgShell.create(wl_server, 6),
-
         .wlr_alpha_modifier = try wlr.AlphaModifierV1.create(wl_server),
         .wlr_data_control_manager = try wlr.DataControlManagerV1.create(wl_server),
         .wlr_export_dmabuf_manager = try wlr.ExportDmabufManagerV1.create(wl_server),
@@ -107,6 +103,7 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
         .wlr_content_type_manager = try wlr.ContentTypeManagerV1.create(wl_server, 1),
 
         .output_manager = undefined,
+        .surface_manager = undefined,
     };
 
     if (wlr_renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
@@ -117,9 +114,9 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
     }
 
     try self.output_manager.init();
+    try self.surface_manager.init();
 
     wlr_renderer.events.lost.add(&self.renderer_lost);
-    self.wlr_xdg_shell.events.new_toplevel.add(&self.new_toplevel);
 
     wl_server.setGlobalFilter(*hwc.Server, handleGlobalFilter, self);
 
@@ -142,6 +139,7 @@ pub fn deinit(self: *hwc.Server) void {
     self.wlr_allocator.destroy();
 
     self.output_manager.deinit();
+    self.surface_manager.deinit();
 
     self.wl_server.destroy();
 
@@ -168,8 +166,8 @@ fn handleGlobalFilter(
     server: *hwc.Server,
 ) bool {
     if (server.wlr_security_context_manager.lookupClient(wl_client) != null) {
-        const allowed = server.allowList(wl_global);
-        const blocked = server.blockList(wl_global);
+        const allowed = server.isAllowed(wl_global);
+        const blocked = server.isBlocked(wl_global);
 
         assert(blocked != allowed);
 
@@ -179,7 +177,7 @@ fn handleGlobalFilter(
     }
 }
 
-fn allowList(self: *hwc.Server, wl_global: *const wl.Global) bool {
+fn isAllowed(self: *hwc.Server, wl_global: *const wl.Global) bool {
     if (self.wlr_drm) |wlr_drm| {
         return wl_global == wlr_drm.global;
     }
@@ -192,6 +190,7 @@ fn allowList(self: *hwc.Server, wl_global: *const wl.Global) bool {
         mem.orderZ(u8, wl_global.getInterface().name, "wl_seat") == .eq or
         wl_global == self.output_manager.wlr_presentation.global or
         wl_global == self.output_manager.wlr_xdg_output_manager.global or
+        wl_global == self.surface_manager.wlr_xdg_shell.global or
         wl_global == self.wlr_alpha_modifier.global or
         wl_global == self.wlr_compositor.global or
         wl_global == self.wlr_content_type_manager.global or
@@ -204,11 +203,13 @@ fn allowList(self: *hwc.Server, wl_global: *const wl.Global) bool {
         wl_global == self.wlr_viewporter.global;
 }
 
-fn blockList(self: *hwc.Server, wl_global: *const wl.Global) bool {
-    return wl_global == self.wlr_data_control_manager.global or
+fn isBlocked(self: *hwc.Server, wl_global: *const wl.Global) bool {
+    return wl_global == self.surface_manager.wlr_foreign_toplevel_manager.global or
         wl_global == self.output_manager.wlr_gamma_control_manager.global or
         wl_global == self.output_manager.wlr_output_manager.global or
         wl_global == self.output_manager.wlr_output_power_manager.global or
+        wl_global == self.surface_manager.wlr_layer_shell.global or
+        wl_global == self.wlr_data_control_manager.global or
         wl_global == self.wlr_export_dmabuf_manager.global or
         wl_global == self.wlr_screencopy_manager.global or
         wl_global == self.wlr_security_context_manager.global;
@@ -257,18 +258,4 @@ fn handleRendererLost(listener: *wl.Listener(void)) void {
 
     server.wlr_allocator.destroy();
     server.wlr_allocator = new_allocator;
-}
-
-fn handleNewToplevel(
-    listener: *wl.Listener(*wlr.XdgToplevel),
-    wlr_xdg_toplevel: *wlr.XdgToplevel,
-) void {
-    const server: *hwc.Server = @fieldParentPtr("new_toplevel", listener);
-
-    hwc.XdgToplevel.create(server.allocator, wlr_xdg_toplevel) catch |err| {
-        log.err("{s} failed: {}", .{ @src().fn_name, err });
-        if (err == error.OutOfMemory) {
-            wlr_xdg_toplevel.resource.postNoMemory();
-        }
-    };
 }
