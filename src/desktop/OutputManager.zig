@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.OutputManager);
+const log = std.log.scoped(.@"desktop.OutputManager");
 const assert = std.debug.assert;
 
 const wayland = @import("wayland");
@@ -51,16 +51,13 @@ pub fn init(self: *hwc.desktop.OutputManager) !void {
 }
 pub fn deinit(self: *hwc.desktop.OutputManager) void {
     self.new_output.link.remove();
-    assert(self.outputs.empty());
 }
 
 fn handleNewOutput(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
     hwc.desktop.Output.create(server.allocator, wlr_output) catch |err| {
-        log.err("{s} failed: '{s}' {}", .{ @src().fn_name, wlr_output.name, err });
+        log.err("{s} failed: '{}': name='{s}'", .{ @src().fn_name, err, wlr_output.name });
         wlr_output.destroy();
     };
-
-    log.info("{s}: '{s}'", .{ @src().fn_name, wlr_output.name });
 }
 
 fn handleApplyConfig(

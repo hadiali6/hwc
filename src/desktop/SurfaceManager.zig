@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.SurfaceManager);
+const log = std.log.scoped(.@"desktop.SurfaceManager");
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
@@ -37,7 +37,7 @@ fn handleNewToplevel(
     wlr_xdg_toplevel: *wlr.XdgToplevel,
 ) void {
     hwc.desktop.XdgToplevel.create(server.allocator, wlr_xdg_toplevel) catch |err| {
-        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        log.err("{s} failed: '{}'", .{ @src().fn_name, err });
 
         if (err == error.OutOfMemory) {
             wlr_xdg_toplevel.resource.postNoMemory();
@@ -50,7 +50,7 @@ fn handleNewLayerSurface(
     wlr_layer_surface: *wlr.LayerSurfaceV1,
 ) void {
     hwc.desktop.LayerSurface.create(server.allocator, wlr_layer_surface) catch |err| {
-        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        log.err("{s} failed: '{}'", .{ @src().fn_name, err });
 
         if (err == error.OutOfMemory) {
             wlr_layer_surface.resource.postNoMemory();

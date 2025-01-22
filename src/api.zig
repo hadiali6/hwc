@@ -1,6 +1,6 @@
 const std = @import("std");
-const process_log = std.log.scoped(.process);
-const spawn_log = std.log.scoped(.spawn);
+const process_log = std.log.scoped(.@"api.process");
+const spawn_log = std.log.scoped(.@"api.spawn");
 const posix = std.posix;
 const os = std.os;
 const c = std.c;
@@ -17,7 +17,7 @@ pub fn setupProcess() void {
 
     const original = posix.getrlimit(.NOFILE) catch |err| {
         process_log.err(
-            "{s}: getrlimit failed, using system default file descriptor limit: {}",
+            "{s}: '{}': getrlimit failed, using system default file descriptor limit",
             .{ @src().fn_name, err },
         );
         return;
@@ -37,7 +37,7 @@ pub fn setupProcess() void {
     };
 
     posix.setrlimit(.NOFILE, new) catch |err| {
-        process_log.err("{s}: setrlimit failed, using system default file descriptor limit: {}", .{
+        process_log.err("{s}: '{}': setrlimit failed, using system default file descriptor limit", .{
             @src().fn_name,
             err,
         });
@@ -68,6 +68,7 @@ pub fn spawn(cmd: []const u8) !void {
         if (grandchild_pid == 0) {
             posix.execveZ("/bin/sh", &child_args, c.environ) catch posix.system._exit(1);
         } else {
+            spawn_log.info("{s}: pid='{}'", .{ @src().fn_name, grandchild_pid });
             posix.system._exit(0);
         }
     } else {
@@ -100,9 +101,12 @@ fn cleanupChild() void {
     posix.sigaction(posix.SIG.PIPE, &sig_default, null) catch unreachable;
 
     if (original_rlimit) |original| {
-        posix.setrlimit(.NOFILE, original) catch {
-            spawn_log.err("failed to restore original file descriptor limit for " ++
-                "child process, setrlimit failed", .{});
+        posix.setrlimit(.NOFILE, original) catch |err| {
+            spawn_log.err(
+                "{s} failed: '{}': " ++
+                    "setrlimit unable to restore original file descriptor limit for child process",
+                .{ @src().fn_name, err },
+            );
         };
     }
 }

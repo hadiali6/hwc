@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.XdgToplevel);
+const log = std.log.scoped(.@"desktop.XdgToplevel");
 const mem = std.mem;
 
 const wayland = @import("wayland");
@@ -60,6 +60,12 @@ pub fn create(allocator: mem.Allocator, wlr_xdg_toplevel: *wlr.XdgToplevel) !voi
     wlr_xdg_toplevel.base.surface.events.map.add(&toplevel.map);
     wlr_xdg_toplevel.base.surface.events.commit.add(&toplevel.commit);
     wlr_xdg_toplevel.base.events.new_popup.add(&toplevel.new_popup);
+
+    log.info("{s}: app_id='{s}' title='{s}'", .{
+        @src().fn_name,
+        toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
+        toplevel.wlr_xdg_toplevel.title orelse "unknown",
+    });
 }
 
 fn destroyPopups(self: *hwc.desktop.XdgToplevel) void {
@@ -83,6 +89,12 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     toplevel.commit.link.remove();
     toplevel.new_popup.link.remove();
 
+    log.info("{s}: app_id='{s}' title='{s}'", .{
+        @src().fn_name,
+        toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
+        toplevel.wlr_xdg_toplevel.title orelse "unknown",
+    });
+
     server.allocator.destroy(toplevel);
 }
 
@@ -99,6 +111,12 @@ fn handleMap(listener: *wl.Listener(void)) void {
     toplevel.wlr_xdg_toplevel.events.request_resize.add(&toplevel.request_resize);
     toplevel.wlr_xdg_toplevel.events.set_title.add(&toplevel.set_title);
     toplevel.wlr_xdg_toplevel.events.set_app_id.add(&toplevel.set_app_id);
+
+    log.info("{s}: app_id='{s}' title='{s}'", .{
+        @src().fn_name,
+        toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
+        toplevel.wlr_xdg_toplevel.title orelse "unknown",
+    });
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
@@ -114,6 +132,12 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     toplevel.request_resize.link.remove();
     toplevel.set_title.link.remove();
     toplevel.set_app_id.link.remove();
+
+    log.info("{s}: app_id='{s}' title='{s}'", .{
+        @src().fn_name,
+        toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
+        toplevel.wlr_xdg_toplevel.title orelse "unknown",
+    });
 }
 
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
@@ -133,7 +157,7 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.Xdg
         toplevel.popup_tree,
         toplevel.popup_tree,
     ) catch |err| {
-        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        log.err("{s} failed: '{}'", .{ @src().fn_name, err });
         wlr_xdg_popup.resource.postNoMemory();
     };
 }

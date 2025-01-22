@@ -43,7 +43,7 @@ wlr_content_type_manager: *wlr.ContentTypeManagerV1,
 wlr_data_control_manager: *wlr.DataControlManagerV1,
 wlr_export_dmabuf_manager: *wlr.ExportDmabufManagerV1,
 wlr_fractional_scale_manager: *wlr.FractionalScaleManagerV1,
-wlr_primary_selection_manager: *wlr.PrimarySelectionDeviceManagerV1,
+wlr_primary_selection_device_manager: *wlr.PrimarySelectionDeviceManagerV1,
 wlr_screencopy_manager: *wlr.ScreencopyManagerV1,
 wlr_security_context_manager: *wlr.SecurityContextManagerV1,
 wlr_single_pixel_buffer_manager: *wlr.SinglePixelBufferManagerV1,
@@ -51,6 +51,7 @@ wlr_viewporter: *wlr.Viewporter,
 
 output_manager: hwc.desktop.OutputManager,
 surface_manager: hwc.desktop.SurfaceManager,
+input_manager: hwc.input.Manager,
 
 pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
     const wl_server = try wl.Server.create();
@@ -95,7 +96,7 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
         .wlr_data_control_manager = try wlr.DataControlManagerV1.create(wl_server),
         .wlr_export_dmabuf_manager = try wlr.ExportDmabufManagerV1.create(wl_server),
         .wlr_fractional_scale_manager = try wlr.FractionalScaleManagerV1.create(wl_server, 1),
-        .wlr_primary_selection_manager = try wlr.PrimarySelectionDeviceManagerV1.create(wl_server),
+        .wlr_primary_selection_device_manager = try wlr.PrimarySelectionDeviceManagerV1.create(wl_server),
         .wlr_screencopy_manager = try wlr.ScreencopyManagerV1.create(wl_server),
         .wlr_security_context_manager = try wlr.SecurityContextManagerV1.create(wl_server),
         .wlr_single_pixel_buffer_manager = try wlr.SinglePixelBufferManagerV1.create(wl_server),
@@ -104,6 +105,7 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
 
         .output_manager = undefined,
         .surface_manager = undefined,
+        .input_manager = undefined,
     };
 
     if (wlr_renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
@@ -115,6 +117,7 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
 
     try self.output_manager.init();
     try self.surface_manager.init();
+    try self.input_manager.init();
 
     wlr_renderer.events.lost.add(&self.renderer_lost);
 
@@ -131,14 +134,17 @@ pub fn deinit(self: *hwc.Server) void {
 
     self.wl_server.destroyClients();
 
+    self.input_manager.deinit();
+    self.output_manager.deinit();
+
     self.wlr_backend.destroy();
 
-    self.wlr_scene.tree.node.destroy();
+    assert(self.output_manager.outputs.empty());
 
+    self.wlr_scene.tree.node.destroy();
     self.wlr_renderer.destroy();
     self.wlr_allocator.destroy();
 
-    self.output_manager.deinit();
     self.surface_manager.deinit();
 
     self.wl_server.destroy();
@@ -146,18 +152,22 @@ pub fn deinit(self: *hwc.Server) void {
     log.info("{s}", .{@src().fn_name});
 }
 
-pub fn start(self: *hwc.Server) !void {
-    var buf: [11]u8 = undefined;
-    const socket = try self.wl_server.addSocketAuto(&buf);
-    log.info("{s}: setting WAYLAND_DISPLAY={s}", .{ @src().fn_name, socket });
-
-    try self.wlr_backend.start();
+pub fn startSocket(self: *hwc.Server) !void {
+    const socket = blk: {
+        var buf: [11]u8 = undefined;
+        break :blk try self.wl_server.addSocketAuto(&buf);
+    };
 
     if (libc.setenv("WAYLAND_DISPLAY", socket.ptr, 1) < 0) {
         return error.SetenvFailed;
     }
 
-    log.info("{s}", .{@src().fn_name});
+    log.info("{s}: set WAYLAND_DISPLAY={s}", .{ @src().fn_name, socket });
+}
+
+pub fn start(self: *hwc.Server) !void {
+    try self.wlr_backend.start();
+    self.wl_server.run();
 }
 
 fn handleGlobalFilter(
@@ -196,7 +206,7 @@ fn isAllowed(self: *hwc.Server, wl_global: *const wl.Global) bool {
         wl_global == self.wlr_content_type_manager.global or
         wl_global == self.wlr_data_device_manager.global or
         wl_global == self.wlr_fractional_scale_manager.global or
-        wl_global == self.wlr_primary_selection_manager.global or
+        wl_global == self.wlr_primary_selection_device_manager.global or
         wl_global == self.wlr_shm.global or
         wl_global == self.wlr_single_pixel_buffer_manager.global or
         wl_global == self.wlr_subcompositor.global or
@@ -231,14 +241,23 @@ fn handleDestroySingals(signal: c_int, wl_server: *wl.Server) c_int {
 fn handleRendererLost(listener: *wl.Listener(void)) void {
     const server: *hwc.Server = @fieldParentPtr("renderer_lost", listener);
 
-    const new_renderer = wlr.Renderer.autocreate(server.wlr_backend) catch {
-        log.err("{s}: failed to create new renderer after GPU reset", .{@src().fn_name});
+    const new_renderer = wlr.Renderer.autocreate(server.wlr_backend) catch |err| {
+        log.err(
+            "{s}: '{}': failed to create new renderer after GPU reset",
+            .{ @src().fn_name, err },
+        );
         return;
     };
 
-    const new_allocator = wlr.Allocator.autocreate(server.wlr_backend, server.wlr_renderer) catch {
+    const new_allocator = wlr.Allocator.autocreate(
+        server.wlr_backend,
+        server.wlr_renderer,
+    ) catch |err| {
         new_renderer.destroy();
-        log.err("{s}: failed to create new allocator after GPU reset", .{@src().fn_name});
+        log.err(
+            "{s}: '{}': failed to create new allocator after GPU reset",
+            .{ @src().fn_name, err },
+        );
         return;
     };
 

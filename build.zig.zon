@@ -20,6 +20,10 @@
             .url = "https://codeberg.org/ifreund/zig-xkbcommon/archive/d8412eed455c8cfea5b4cda2ea260095ccb47045.tar.gz",
             .hash = "12200989a0e5c5d8186dd16752e3d83d914d4f54ecca7b3e147443f13a9580ede671",
         },
+        .@"zig-libinput" = .{
+            .url = "https://github.com/hadiali6/zig-libinput/archive/refs/heads/master.tar.gz",
+            .hash = "1220965d0c4c33d569765c3e3ecf874604b55f90dc829d6bf831f433b84a56bbb94a",
+        },
     },
 
     .paths = .{

@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.Output);
+const log = std.log.scoped(.@"desktop.Output");
 const fmt = std.fmt;
 const mem = std.mem;
 const posix = std.posix;
@@ -62,8 +62,8 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
         const commit_successful = wlr_output.commitState(&state);
         if (!commit_successful) {
             log.err(
-                "{s}: initial output commit with preferred mode failed, trying all modes",
-                .{@src().fn_name},
+                "{s}: initial output commit with preferred mode failed, trying all modes: name='{s}'",
+                .{ @src().fn_name, wlr_output.name },
             );
 
             var it = wlr_output.modes.iterator(.forward);
@@ -72,14 +72,14 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
 
                 if (wlr_output.commitState(&state)) {
                     log.info(
-                        "{s}: initial output commit succeeded with mode {}x{}@{}mHz",
-                        .{ @src().fn_name, mode.width, mode.height, mode.refresh },
+                        "{s}: initial output commit succeeded with mode {}x{}@{}mHz: name='{s}'",
+                        .{ @src().fn_name, mode.width, mode.height, mode.refresh, wlr_output.name },
                     );
                     break;
                 } else {
                     log.err(
-                        "{s}: initial output commit failed with mode {}x{}@{}mHz",
-                        .{ @src().fn_name, mode.width, mode.height, mode.refresh },
+                        "{s}: initial output commit failed with mode {}x{}@{}mHz: name='{s}'",
+                        .{ @src().fn_name, mode.width, mode.height, mode.refresh, wlr_output.name },
                     );
                 }
             }
@@ -120,6 +120,8 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
     errdefer server.output_manager.wlr_output_layout.remove(wlr_output);
 
     server.output_manager.outputs.prepend(output);
+
+    log.info("{s}: name='{s}'", .{ @src().fn_name, wlr_output.name });
 }
 
 pub fn layerSurfaceTree(self: hwc.desktop.Output, layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
@@ -149,7 +151,7 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) v
 
     server.allocator.destroy(output);
 
-    log.debug("{s}: '{s}'", .{ @src().fn_name, wlr_output.name });
+    log.info("{s}: name='{s}'", .{ @src().fn_name, wlr_output.name });
 }
 
 fn handleFrame(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
@@ -177,7 +179,7 @@ fn handleFrame(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
             }
         }
     } catch |err| {
-        log.err("{s} failed: {} for output: '{s}'", .{ @src().fn_name, err, wlr_output.name });
+        log.err("{s} failed: '{}': name='{s}'", .{ @src().fn_name, err, wlr_output.name });
     };
 
     var now: posix.timespec = undefined;
@@ -191,8 +193,9 @@ fn handleRequestState(
 ) void {
     const successful_commit = event.output.commitState(event.state);
 
-    log.info("{s}: {s} modeset", .{
+    log.info("{s}: {s} modeset: name='{s}'", .{
         @src().fn_name,
         if (successful_commit) "successful" else "failed",
+        event.output.name,
     });
 }

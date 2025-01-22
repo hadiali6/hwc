@@ -29,6 +29,7 @@ pub fn build(b: *std.Build) void {
     const wlroots_bindings = b.dependency("zig-wlroots", .{}).module("wlroots");
     const pixman_bindings = b.dependency("zig-pixman", .{}).module("pixman");
     const xkbcommon_bindings = b.dependency("zig-xkbcommon", .{}).module("xkbcommon");
+    const libinput_bindings = b.dependency("zig-libinput", .{}).module("libinput");
 
     wlroots_bindings.resolved_target = target;
     wlroots_bindings.addImport("wayland", wayland_bindings);
@@ -49,10 +50,13 @@ pub fn build(b: *std.Build) void {
     hwc_exe.root_module.addImport("wayland", wayland_bindings);
     hwc_exe.root_module.addImport("wlroots", wlroots_bindings);
     hwc_exe.root_module.addImport("pixman", pixman_bindings);
+    hwc_exe.root_module.addImport("libinput", libinput_bindings);
 
     hwc_exe.linkLibC();
+
     hwc_exe.linkSystemLibrary("wayland-server");
     hwc_exe.linkSystemLibrary("pixman-1");
+    hwc_exe.linkSystemLibrary("libinput");
 
     b.installArtifact(hwc_exe);
 
@@ -66,9 +70,13 @@ pub fn build(b: *std.Build) void {
     hwc_exe_check.root_module.addImport("wayland", wayland_bindings);
     hwc_exe_check.root_module.addImport("wlroots", wlroots_bindings);
     hwc_exe_check.root_module.addImport("pixman", pixman_bindings);
+    hwc_exe_check.root_module.addImport("libinput", libinput_bindings);
+
     hwc_exe_check.linkLibC();
+
     hwc_exe_check.linkSystemLibrary("wayland-server");
     hwc_exe_check.linkSystemLibrary("pixman-1");
+    hwc_exe_check.linkSystemLibrary("libinput");
 
     const check = b.step("check", "Check if hwc compiles");
     check.dependOn(&hwc_exe_check.step);

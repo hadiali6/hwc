@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.XdgPopup);
+const log = std.log.scoped(.@"desktop.XdgPopup");
 const mem = std.mem;
 
 const wayland = @import("wayland");
@@ -37,6 +37,8 @@ pub fn create(
     wlr_xdg_popup.events.reposition.add(&popup.reposition);
     wlr_xdg_popup.base.surface.events.commit.add(&popup.commit);
     wlr_xdg_popup.base.events.new_popup.add(&popup.new_popup);
+
+    log.info("{s}: parent={any}", .{ @src().fn_name, wlr_xdg_popup.parent orelse null });
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {
@@ -44,6 +46,8 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 
     popup.commit.link.remove();
     popup.destroy.link.remove();
+
+    log.info("{s}", .{@src().fn_name});
 
     server.allocator.destroy(popup);
 }
@@ -69,7 +73,7 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.Xdg
         popup.root_tree,
         popup.parent_tree,
     ) catch |err| {
-        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        log.err("{s} failed: '{}'", .{ @src().fn_name, err });
         if (err == error.OutOfMemory) {
             wlr_xdg_popup.resource.postNoMemory();
         }

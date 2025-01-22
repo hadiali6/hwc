@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.LayerSurface);
+const log = std.log.scoped(.@"desktop.LayerSurface");
 const assert = std.debug.assert;
 const mem = std.mem;
 
@@ -43,6 +43,8 @@ pub fn create(allocator: mem.Allocator, wlr_layer_surface: *wlr.LayerSurfaceV1) 
     wlr_layer_surface.surface.events.map.add(&layer_surface.map);
     wlr_layer_surface.surface.events.unmap.add(&layer_surface.unmap);
     wlr_layer_surface.surface.events.commit.add(&layer_surface.commit);
+
+    log.info("{s}: namespace='{s}'", .{ @src().fn_name, wlr_layer_surface.namespace });
 }
 
 fn destroyPopups(self: *hwc.desktop.LayerSurface) void {
@@ -65,9 +67,9 @@ fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfa
     layer_surface.unmap.link.remove();
     layer_surface.commit.link.remove();
 
-    server.allocator.destroy(layer_surface);
+    log.info("{s}: namespace='{s}'", .{ @src().fn_name, layer_surface.wlr_layer_surface.namespace });
 
-    log.debug("{s}", .{@src().fn_name});
+    server.allocator.destroy(layer_surface);
 }
 
 fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.XdgPopup) void {
@@ -80,18 +82,23 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.Xdg
         layer_surface.popup_tree,
     ) catch |err| {
         wlr_xdg_popup.resource.postNoMemory();
-        log.err("{s} failed: {}", .{ @src().fn_name, err });
+        log.err(
+            "{s} failed: '{}': namespace='{s}'",
+            .{ @src().fn_name, err, layer_surface.wlr_layer_surface.namespace },
+        );
     };
 }
 
 fn handleMap(listener: *wl.Listener(void)) void {
     const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("map", listener);
-    _ = layer_surface;
+
+    log.info("{s}: namespace='{s}'", .{ @src().fn_name, layer_surface.wlr_layer_surface.namespace });
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("unmap", listener);
-    _ = layer_surface;
+
+    log.info("{s}: namespace='{s}'", .{ @src().fn_name, layer_surface.wlr_layer_surface.namespace });
 }
 
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
