@@ -13,13 +13,40 @@ const libinput = @import("libinput");
 const hwc = @import("root");
 const server = &hwc.server;
 
+const InternalDevice = union(enum) {
+    keyboard: hwc.input.Keyboard,
+    pointer,
+    touch,
+    tablet,
+    tablet_pad,
+    @"switch",
+
+    fn init(self: *InternalDevice, wlr_input_device: *wlr.InputDevice) !void {
+        switch (wlr_input_device.type) {
+            .keyboard => {
+                self.* = .{ .keyboard = undefined };
+                try self.keyboard.init(wlr_input_device.toKeyboard());
+            },
+            .pointer, .touch, .tablet, .tablet_pad, .@"switch" => {},
+        }
+    }
+
+    fn deinit(self: InternalDevice) void {
+        switch (self) {
+            .keyboard => |*keyboard| @constCast(keyboard).deinit(),
+            .pointer, .touch, .tablet, .tablet_pad, .@"switch" => {},
+        }
+    }
+};
+
 link: wl.list.Link,
 wlr_input_device: *wlr.InputDevice,
 identifier: []const u8,
+internal_device: InternalDevice,
 
 destroy: wl.Listener(*wlr.InputDevice) = wl.Listener(*wlr.InputDevice).init(handleDestroy),
 
-pub fn create(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) !void {
+pub fn create(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) !*hwc.input.Device {
     const device = try allocator.create(hwc.input.Device);
     errdefer allocator.destroy(device);
 
@@ -30,13 +57,16 @@ pub fn create(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) !voi
         .link = undefined,
         .wlr_input_device = wlr_input_device,
         .identifier = identifier,
+        .internal_device = undefined,
     };
+
+    try device.internal_device.init(wlr_input_device);
 
     wlr_input_device.events.destroy.add(&device.destroy);
 
-    server.input_manager.devices.prepend(device);
+    log.info("{s}: identifier='{s}'", .{ @src().fn_name, device.identifier });
 
-    log.info("{s}: '{s}'", .{ @src().fn_name, device.identifier });
+    return device;
 }
 
 fn createIdentifier(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) ![]const u8 {
@@ -72,7 +102,9 @@ fn handleDestroy(listener: *wl.Listener(*wlr.InputDevice), _: *wlr.InputDevice) 
 
     device.destroy.link.remove();
 
-    log.info("{s}: '{s}'", .{ @src().fn_name, device.identifier });
+    device.internal_device.deinit();
+
+    log.info("{s}: identifier='{s}'", .{ @src().fn_name, device.identifier });
 
     server.allocator.free(device.identifier);
     server.allocator.destroy(device);

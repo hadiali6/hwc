@@ -68,7 +68,7 @@ pub fn create(allocator: mem.Allocator, wlr_xdg_toplevel: *wlr.XdgToplevel) !voi
     });
 }
 
-fn destroyPopups(self: *hwc.desktop.XdgToplevel) void {
+pub fn destroyPopups(self: *hwc.desktop.XdgToplevel) void {
     var it = self.wlr_xdg_toplevel.base.popups.safeIterator(.forward);
     while (it.next()) |wlr_xdg_popup| {
         wlr_xdg_popup.destroy();
@@ -100,7 +100,8 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 
 fn handleMap(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("map", listener);
-    _ = toplevel.wlr_xdg_toplevel.setActivated(true);
+
+    server.input_manager.default_seat.focus(.{ .toplevel = toplevel });
 
     // add listeners that are only active while mapped
     toplevel.wlr_xdg_toplevel.base.events.ack_configure.add(&toplevel.ack_configure);

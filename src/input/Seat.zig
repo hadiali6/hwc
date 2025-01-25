@@ -1,5 +1,6 @@
 const std = @import("std");
 const log = std.log.scoped(.@"input.Seat");
+const meta = std.meta;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
@@ -9,6 +10,7 @@ const hwc = @import("root");
 const server = &hwc.server;
 
 wlr_seat: *wlr.Seat,
+focused: hwc.desktop.Focusable = .none,
 
 destroy: wl.Listener(*wlr.Seat) = wl.Listener(*wlr.Seat).init(handleDestroy),
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) =
@@ -34,7 +36,59 @@ pub fn init(self: *hwc.input.Seat, name: [*:0]const u8) !void {
     self.wlr_seat.events.request_start_drag.add(&self.request_start_drag);
     self.wlr_seat.events.start_drag.add(&self.start_drag);
 
-    log.info("{s}: '{s}'", .{ @src().fn_name, name });
+    log.info("{s}: name='{s}'", .{ @src().fn_name, name });
+}
+
+pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
+    if (meta.eql(self.focused, target)) {
+        return;
+    }
+
+    log.info("{s}: {s} -> {s}", .{ @src().fn_name, @tagName(self.focused), @tagName(target) });
+
+    switch (self.focused) {
+        .toplevel => |toplevel| {
+            _ = toplevel.wlr_xdg_toplevel.setActivated(false);
+            toplevel.destroyPopups();
+        },
+        // TODO
+        .layer => |layer| {
+            _ = layer;
+        },
+        .none => {},
+    }
+
+    self.focused = target;
+
+    switch (target) {
+        .toplevel => |toplevel| {
+            toplevel.surface_tree.node.raiseToTop();
+            _ = toplevel.wlr_xdg_toplevel.setActivated(true);
+        },
+        // TODO
+        .layer => |layer| {
+            _ = layer;
+        },
+        .none => {
+            self.wlr_seat.keyboardClearFocus();
+        },
+    }
+
+    if (target.wlrSurface()) |wlr_surface| {
+        self.keyboardNotifyEnter(wlr_surface);
+    }
+}
+
+pub fn keyboardNotifyEnter(self: *hwc.input.Seat, wlr_surface: *wlr.Surface) void {
+    if (self.wlr_seat.getKeyboard()) |wlr_keyboard| {
+        self.wlr_seat.keyboardNotifyEnter(
+            wlr_surface,
+            wlr_keyboard.keycodes[0..wlr_keyboard.num_keycodes],
+            &wlr_keyboard.modifiers,
+        );
+    } else {
+        self.wlr_seat.keyboardNotifyEnter(wlr_surface, &.{}, null);
+    }
 }
 
 pub fn updateCapabilities(self: *hwc.input.Seat) void {
@@ -52,10 +106,13 @@ pub fn updateCapabilities(self: *hwc.input.Seat) void {
 
     self.wlr_seat.setCapabilities(capabilities);
 
-    log.info(
-        "{s}: keyboard={} pointer={} touch={}",
-        .{ @src().fn_name, capabilities.keyboard, capabilities.pointer, capabilities.touch },
-    );
+    log.info("{s}: name='{s}': keyboard={} pointer={} touch={}", .{
+        @src().fn_name,
+        self.wlr_seat.name,
+        capabilities.keyboard,
+        capabilities.pointer,
+        capabilities.touch,
+    });
 }
 
 fn handleDestroy(listener: *wl.Listener(*wlr.Seat), wlr_seat: *wlr.Seat) void {
@@ -67,6 +124,8 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Seat), wlr_seat: *wlr.Seat) void {
     seat.request_set_primary_selection.link.remove();
     seat.request_start_drag.link.remove();
     seat.start_drag.link.remove();
+
+    log.info("{s}: name='{s}'", .{ @src().fn_name, seat.wlr_seat.name });
 }
 
 fn handleRequestSetCursor(

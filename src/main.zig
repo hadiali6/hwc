@@ -7,6 +7,19 @@ const wlr = @import("wlroots");
 pub const Server = @import("Server.zig");
 
 pub const desktop = struct {
+    pub const Focusable = union(enum) {
+        layer: *LayerSurface,
+        toplevel: *XdgToplevel,
+        none,
+
+        pub fn wlrSurface(self: Focusable) ?*wlr.Surface {
+            return switch (self) {
+                .layer => |layer| layer.wlr_layer_surface.surface,
+                .toplevel => |toplevel| toplevel.wlr_xdg_toplevel.base.surface,
+                .none => null,
+            };
+        }
+    };
     pub const LayerSurface = @import("desktop/LayerSurface.zig");
     pub const Output = @import("desktop/Output.zig");
     pub const OutputManager = @import("desktop/OutputManager.zig");
@@ -17,6 +30,7 @@ pub const desktop = struct {
 
 pub const input = struct {
     pub const Device = @import("input/Device.zig");
+    pub const Keyboard = @import("input/Keyboard.zig");
     pub const Manager = @import("input/Manager.zig");
     pub const Seat = @import("input/Seat.zig");
 };
@@ -31,6 +45,7 @@ pub fn main() !void {
     try server.init(heap.c_allocator);
     try server.startSocket();
     try api.spawn("hello-wayland");
+    try api.spawn("foot");
     try server.start();
     server.deinit();
 }

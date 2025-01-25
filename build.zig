@@ -51,12 +51,14 @@ pub fn build(b: *std.Build) void {
     hwc_exe.root_module.addImport("wlroots", wlroots_bindings);
     hwc_exe.root_module.addImport("pixman", pixman_bindings);
     hwc_exe.root_module.addImport("libinput", libinput_bindings);
+    hwc_exe.root_module.addImport("xkbcommon", xkbcommon_bindings);
 
     hwc_exe.linkLibC();
 
     hwc_exe.linkSystemLibrary("wayland-server");
     hwc_exe.linkSystemLibrary("pixman-1");
     hwc_exe.linkSystemLibrary("libinput");
+    hwc_exe.linkSystemLibrary("xkbcommon");
 
     b.installArtifact(hwc_exe);
 
@@ -71,12 +73,14 @@ pub fn build(b: *std.Build) void {
     hwc_exe_check.root_module.addImport("wlroots", wlroots_bindings);
     hwc_exe_check.root_module.addImport("pixman", pixman_bindings);
     hwc_exe_check.root_module.addImport("libinput", libinput_bindings);
+    hwc_exe_check.root_module.addImport("xkbcommon", xkbcommon_bindings);
 
     hwc_exe_check.linkLibC();
 
-    hwc_exe_check.linkSystemLibrary("wayland-server");
-    hwc_exe_check.linkSystemLibrary("pixman-1");
     hwc_exe_check.linkSystemLibrary("libinput");
+    hwc_exe_check.linkSystemLibrary("pixman-1");
+    hwc_exe_check.linkSystemLibrary("wayland-server");
+    hwc_exe_check.linkSystemLibrary("xkbcommon");
 
     const check = b.step("check", "Check if hwc compiles");
     check.dependOn(&hwc_exe_check.step);
