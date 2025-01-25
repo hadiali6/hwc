@@ -70,7 +70,11 @@ fn handleModifiers(_: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Keyboard) 
     wlr_seat.setKeyboard(wlr_keyboard);
     wlr_seat.keyboardNotifyModifiers(&wlr_keyboard.modifiers);
 
-    log.info("{s}: {}", .{ @src().fn_name, wlr_keyboard.getModifiers() });
+    const mods = wlr_keyboard.getModifiers();
+    log.debug(
+        "{s}: shift='{}' caps='{}' ctrl='{}' alt='{}' mod2='{}' mod3='{}' logo='{}' mod5='{}'",
+        .{ @src().fn_name, mods.shift, mods.caps, mods.ctrl, mods.alt, mods.mod2, mods.mod3, mods.logo, mods.mod5 },
+    );
 }
 
 fn handleKey(
@@ -86,7 +90,7 @@ fn handleKey(
     }
 
     // translate libinput keycode -> xkbcommon
-    const xkb_keycode = event.keycode;
+    const xkb_keycode = event.keycode + 8;
 
     const xkb_state = (wlr_keyboard.xkb_state orelse return).ref();
     defer xkb_state.unref();
@@ -95,10 +99,11 @@ fn handleKey(
 
     const keybind_executed = blk: {
         for (keysyms) |sym| {
-            // TODO: log sym as string
-            // var buffer: [256]u8 = undefined;
-            // _ = sym.getName(&buffer, buffer.len);
-            // log.debug("{s} {}", .{ buffer, sym });
+            log.debug("{s} key='{s}'", .{ @src().fn_name, inner_blk: {
+                var buffer: [64]u8 = undefined;
+                _ = sym.getName(&buffer, buffer.len);
+                break :inner_blk buffer;
+            } });
 
             break :blk event.state == .pressed and vtKeybind(sym);
         } else break :blk false;
@@ -109,8 +114,6 @@ fn handleKey(
         wlr_seat.setKeyboard(wlr_keyboard);
         wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
     }
-
-    log.info("{s}: keycode='{}'", .{ @src().fn_name, event.keycode });
 }
 
 fn vtKeybind(keysym: xkb.Keysym) bool {

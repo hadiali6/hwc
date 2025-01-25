@@ -193,7 +193,7 @@ fn handleRequestState(
 ) void {
     const successful_commit = event.output.commitState(event.state);
 
-    log.info("{s}: {s} modeset: name='{s}'", .{
+    log.debug("{s}: {s} modeset: name='{s}'", .{
         @src().fn_name,
         if (successful_commit) "successful" else "failed",
         event.output.name,
