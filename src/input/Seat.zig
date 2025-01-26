@@ -10,6 +10,7 @@ const hwc = @import("root");
 const server = &hwc.server;
 
 wlr_seat: *wlr.Seat,
+cursor: hwc.input.Cursor,
 focused: hwc.desktop.Focusable = .none,
 
 destroy: wl.Listener(*wlr.Seat) = wl.Listener(*wlr.Seat).init(handleDestroy),
@@ -28,7 +29,10 @@ drag_destroy: wl.Listener(*wlr.Drag) = wl.Listener(*wlr.Drag).init(handleDragDes
 pub fn init(self: *hwc.input.Seat, name: [*:0]const u8) !void {
     self.* = .{
         .wlr_seat = try wlr.Seat.create(server.wl_server, name),
+        .cursor = undefined,
     };
+
+    try self.cursor.init();
 
     self.wlr_seat.events.destroy.add(&self.destroy);
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
@@ -52,8 +56,8 @@ pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
             toplevel.destroyPopups();
         },
         // TODO
-        .layer => |layer| {
-            _ = layer;
+        .layer_surface => |layer_surface| {
+            _ = layer_surface;
         },
         .none => {},
     }
@@ -66,8 +70,8 @@ pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
             _ = toplevel.wlr_xdg_toplevel.setActivated(true);
         },
         // TODO
-        .layer => |layer| {
-            _ = layer;
+        .layer_surface => |layer_surface| {
+            _ = layer_surface;
         },
         .none => {
             self.wlr_seat.keyboardClearFocus();
@@ -117,7 +121,8 @@ pub fn updateCapabilities(self: *hwc.input.Seat) void {
 
 fn handleDestroy(listener: *wl.Listener(*wlr.Seat), wlr_seat: *wlr.Seat) void {
     const seat: *hwc.input.Seat = @fieldParentPtr("destroy", listener);
-    _ = wlr_seat;
+
+    seat.cursor.deinit();
 
     seat.destroy.link.remove();
     seat.request_set_cursor.link.remove();
@@ -125,7 +130,7 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Seat), wlr_seat: *wlr.Seat) void {
     seat.request_start_drag.link.remove();
     seat.start_drag.link.remove();
 
-    log.info("{s}: name='{s}'", .{ @src().fn_name, seat.wlr_seat.name });
+    log.info("{s}: name='{s}'", .{ @src().fn_name, wlr_seat.name });
 }
 
 fn handleRequestSetCursor(
@@ -133,8 +138,12 @@ fn handleRequestSetCursor(
     event: *wlr.Seat.event.RequestSetCursor,
 ) void {
     const seat: *hwc.input.Seat = @fieldParentPtr("request_set_cursor", listener);
-    _ = seat;
-    _ = event;
+
+    if (seat.wlr_seat.pointer_state.focused_client == event.seat_client) {
+        log.info("{s}: {*} set cursor", .{ @src().fn_name, event.seat_client });
+
+        seat.cursor.wlr_cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
+    }
 }
 
 fn handleRequestSetSelection(
@@ -142,8 +151,8 @@ fn handleRequestSetSelection(
     event: *wlr.Seat.event.RequestSetSelection,
 ) void {
     const seat: *hwc.input.Seat = @fieldParentPtr("request_set_selection", listener);
-    _ = seat;
-    _ = event;
+
+    seat.wlr_seat.setSelection(event.source, event.serial);
 }
 
 fn handleRequestSetPrimarySelection(
@@ -151,8 +160,8 @@ fn handleRequestSetPrimarySelection(
     event: *wlr.Seat.event.RequestSetPrimarySelection,
 ) void {
     const seat: *hwc.input.Seat = @fieldParentPtr("request_set_primary_selection", listener);
-    _ = seat;
-    _ = event;
+
+    seat.wlr_seat.setPrimarySelection(event.source, event.serial);
 }
 
 fn handleRequestStartDrag(

@@ -13,7 +13,7 @@ const libinput = @import("libinput");
 const hwc = @import("root");
 const server = &hwc.server;
 
-const InternalDevice = union(enum) {
+const InternalDevice = union(wlr.InputDevice.Type) {
     keyboard: hwc.input.Keyboard,
     pointer,
     touch,
@@ -27,14 +27,24 @@ const InternalDevice = union(enum) {
                 self.* = .{ .keyboard = undefined };
                 try self.keyboard.init(wlr_input_device.toKeyboard());
             },
-            .pointer, .touch, .tablet, .tablet_pad, .@"switch" => {},
+            .pointer, .touch => {
+                self.* = if (wlr_input_device.type == .pointer) .pointer else .touch;
+
+                const seat = server.input_manager.default_seat;
+                seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
+            },
+            .tablet, .tablet_pad, .@"switch" => {},
         }
     }
 
-    fn deinit(self: InternalDevice) void {
+    fn deinit(self: InternalDevice, wlr_input_device: *wlr.InputDevice) void {
         switch (self) {
             .keyboard => |*keyboard| @constCast(keyboard).deinit(),
-            .pointer, .touch, .tablet, .tablet_pad, .@"switch" => {},
+            .pointer, .touch => {
+                const seat = server.input_manager.default_seat;
+                seat.cursor.wlr_cursor.detachInputDevice(wlr_input_device);
+            },
+            .tablet, .tablet_pad, .@"switch" => {},
         }
     }
 };
@@ -97,12 +107,15 @@ fn createIdentifier(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice
     return id;
 }
 
-fn handleDestroy(listener: *wl.Listener(*wlr.InputDevice), _: *wlr.InputDevice) void {
+fn handleDestroy(
+    listener: *wl.Listener(*wlr.InputDevice),
+    wlr_input_device: *wlr.InputDevice,
+) void {
     const device: *hwc.input.Device = @fieldParentPtr("destroy", listener);
 
     device.destroy.link.remove();
 
-    device.internal_device.deinit();
+    device.internal_device.deinit(wlr_input_device);
 
     log.info("{s}: identifier='{s}'", .{ @src().fn_name, device.identifier });
 

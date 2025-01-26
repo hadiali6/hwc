@@ -198,6 +198,7 @@ fn isAllowed(self: *hwc.Server, wl_global: *const wl.Global) bool {
 
     return mem.orderZ(u8, wl_global.getInterface().name, "wl_output") == .eq or
         mem.orderZ(u8, wl_global.getInterface().name, "wl_seat") == .eq or
+        wl_global == self.input_manager.wlr_pointer_gestures.global or
         wl_global == self.output_manager.wlr_presentation.global or
         wl_global == self.output_manager.wlr_xdg_output_manager.global or
         wl_global == self.surface_manager.wlr_xdg_shell.global or

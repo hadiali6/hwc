@@ -9,6 +9,8 @@ pub fn build(b: *std.Build) void {
     const scanner = Scanner.create(b.dependency("zig-wayland", .{}), .{});
 
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
+    scanner.addSystemProtocol("stable/tablet/tablet-v2.xml");
+    scanner.addSystemProtocol("unstable/pointer-gestures/pointer-gestures-unstable-v1.xml");
 
     scanner.addCustomProtocol(b.path("protocol/wlr-layer-shell-unstable-v1.xml"));
     scanner.addCustomProtocol(b.path("protocol/wlr-output-power-management-unstable-v1.xml"));
@@ -24,6 +26,9 @@ pub fn build(b: *std.Build) void {
 
     scanner.generate("zwlr_layer_shell_v1", 5);
     scanner.generate("zwlr_output_power_manager_v1", 1);
+
+    scanner.generate("zwp_pointer_gestures_v1", 3);
+    scanner.generate("zwp_tablet_manager_v2", 1);
 
     const wayland_bindings = b.createModule(.{ .root_source_file = scanner.result });
     const wlroots_bindings = b.dependency("zig-wlroots", .{}).module("wlroots");

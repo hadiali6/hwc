@@ -4,18 +4,20 @@ const heap = std.heap;
 
 const wlr = @import("wlroots");
 
+const api = @import("api.zig");
+
 pub const Server = @import("Server.zig");
 
 pub const desktop = struct {
     pub const Focusable = union(enum) {
-        layer: *LayerSurface,
         toplevel: *XdgToplevel,
+        layer_surface: *LayerSurface,
         none,
 
         pub fn wlrSurface(self: Focusable) ?*wlr.Surface {
             return switch (self) {
-                .layer => |layer| layer.wlr_layer_surface.surface,
                 .toplevel => |toplevel| toplevel.wlr_xdg_toplevel.base.surface,
+                .layer_surface => |layer_surface| layer_surface.wlr_layer_surface.surface,
                 .none => null,
             };
         }
@@ -29,13 +31,12 @@ pub const desktop = struct {
 };
 
 pub const input = struct {
+    pub const Cursor = @import("input/Cursor.zig");
     pub const Device = @import("input/Device.zig");
     pub const Keyboard = @import("input/Keyboard.zig");
     pub const Manager = @import("input/Manager.zig");
     pub const Seat = @import("input/Seat.zig");
 };
-
-const api = @import("api.zig");
 
 pub var server: Server = undefined;
 
@@ -45,7 +46,7 @@ pub fn main() !void {
     try server.init(heap.c_allocator);
     try server.startSocket();
     try api.spawn("hello-wayland");
-    try api.spawn("foot");
+    try api.spawn("foot 2> /dev/null");
     try server.start();
     server.deinit();
 }
