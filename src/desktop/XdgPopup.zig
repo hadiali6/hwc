@@ -6,7 +6,7 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const hwc = @import("root");
+const hwc = @import("hwc");
 const server = &hwc.server;
 
 wlr_xdg_popup: *wlr.XdgPopup,
@@ -52,11 +52,13 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     server.allocator.destroy(popup);
 }
 
+// TODO
 fn handleReposition(listener: *wl.Listener(void)) void {
     const popup: *hwc.desktop.XdgPopup = @fieldParentPtr("reposition", listener);
     _ = popup;
 }
 
+// TODO
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const popup: *hwc.desktop.XdgPopup = @fieldParentPtr("commit", listener);
     if (popup.wlr_xdg_popup.base.initial_commit) {

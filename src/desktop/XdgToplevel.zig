@@ -6,9 +6,10 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const hwc = @import("root");
+const hwc = @import("hwc");
 const server = &hwc.server;
 
+link: wl.list.Link,
 wlr_xdg_toplevel: *wlr.XdgToplevel,
 surface_tree: *wlr.SceneTree,
 popup_tree: *wlr.SceneTree,
@@ -33,7 +34,10 @@ request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
 set_title: wl.Listener(void) = wl.Listener(void).init(handleSetTitle),
 set_app_id: wl.Listener(void) = wl.Listener(void).init(handleSetAppId),
 
-pub fn create(allocator: mem.Allocator, wlr_xdg_toplevel: *wlr.XdgToplevel) !void {
+pub fn create(
+    allocator: mem.Allocator,
+    wlr_xdg_toplevel: *wlr.XdgToplevel,
+) !*hwc.desktop.XdgToplevel {
     const toplevel = try allocator.create(hwc.desktop.XdgToplevel);
     errdefer allocator.destroy(toplevel);
 
@@ -45,6 +49,7 @@ pub fn create(allocator: mem.Allocator, wlr_xdg_toplevel: *wlr.XdgToplevel) !voi
     errdefer popup_tree.node.destroy();
 
     toplevel.* = .{
+        .link = undefined,
         .wlr_xdg_toplevel = wlr_xdg_toplevel,
         .surface_tree = surface_tree,
         .popup_tree = popup_tree,
@@ -66,6 +71,8 @@ pub fn create(allocator: mem.Allocator, wlr_xdg_toplevel: *wlr.XdgToplevel) !voi
         toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
         toplevel.wlr_xdg_toplevel.title orelse "unknown",
     });
+
+    return toplevel;
 }
 
 pub fn destroyPopups(self: *hwc.desktop.XdgToplevel) void {
@@ -79,6 +86,8 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("destroy", listener);
 
     toplevel.destroyPopups();
+
+    toplevel.link.remove();
 
     toplevel.surface_tree.node.destroy();
     toplevel.popup_tree.node.destroy();
@@ -98,6 +107,7 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     server.allocator.destroy(toplevel);
 }
 
+// TODO
 fn handleMap(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("map", listener);
 
@@ -120,6 +130,7 @@ fn handleMap(listener: *wl.Listener(void)) void {
     });
 }
 
+// TODO
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("unmap", listener);
     _ = toplevel.wlr_xdg_toplevel.setActivated(false);
@@ -141,6 +152,7 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     });
 }
 
+// TODO
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("commit", listener);
 
@@ -163,6 +175,7 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.Xdg
     };
 }
 
+// TODO
 fn handleAckConfigure(
     listener: *wl.Listener(*wlr.XdgSurface.Configure),
     event: *wlr.XdgSurface.Configure,
@@ -172,21 +185,25 @@ fn handleAckConfigure(
     _ = event;
 }
 
+// TODO
 fn handleRequestFullscreen(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_fullscreen", listener);
     _ = toplevel;
 }
 
+// TODO
 fn handleRequestMaximize(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_maximize", listener);
     _ = toplevel;
 }
 
+// TODO
 fn handleRequestMinimize(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_minimize", listener);
     _ = toplevel;
 }
 
+// TODO
 fn handleRequestMove(
     listener: *wl.Listener(*wlr.XdgToplevel.event.Move),
     event: *wlr.XdgToplevel.event.Move,
@@ -196,6 +213,7 @@ fn handleRequestMove(
     _ = event;
 }
 
+// TODO
 fn handleRequestResize(
     listener: *wl.Listener(*wlr.XdgToplevel.event.Resize),
     event: *wlr.XdgToplevel.event.Resize,
@@ -205,11 +223,13 @@ fn handleRequestResize(
     _ = event;
 }
 
+// TODO
 fn handleSetTitle(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("set_title", listener);
     _ = toplevel;
 }
 
+// TODO
 fn handleSetAppId(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("set_app_id", listener);
     _ = toplevel;

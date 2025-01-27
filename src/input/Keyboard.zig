@@ -8,7 +8,7 @@ const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
-const hwc = @import("root");
+const hwc = @import("hwc");
 const server = &hwc.server;
 
 wlr_keyboard: *wlr.Keyboard,
@@ -77,6 +77,7 @@ fn handleModifiers(_: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Keyboard) 
     );
 }
 
+// TODO: proper keybinds
 fn handleKey(
     listener: *wl.Listener(*wlr.Keyboard.event.Key),
     event: *wlr.Keyboard.event.Key,

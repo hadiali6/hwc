@@ -7,7 +7,7 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const hwc = @import("root");
+const hwc = @import("hwc");
 const server = &hwc.server;
 
 wlr_layer_surface: *wlr.LayerSurfaceV1,
@@ -89,18 +89,21 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.Xdg
     };
 }
 
+// TODO
 fn handleMap(listener: *wl.Listener(void)) void {
     const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("map", listener);
 
     log.info("{s}: namespace='{s}'", .{ @src().fn_name, layer_surface.wlr_layer_surface.namespace });
 }
 
+// TODO
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("unmap", listener);
 
     log.info("{s}: namespace='{s}'", .{ @src().fn_name, layer_surface.wlr_layer_surface.namespace });
 }
 
+// TODO
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("commit", listener);
     _ = layer_surface;

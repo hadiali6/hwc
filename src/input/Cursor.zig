@@ -6,7 +6,7 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const hwc = @import("root");
+const hwc = @import("hwc");
 const server = &hwc.server;
 
 wlr_cursor: *wlr.Cursor,
@@ -159,6 +159,7 @@ fn handleAxis(
     log.debug("{s}: {*}", .{ @src().fn_name, cursor });
 }
 
+// TODO
 fn handleButton(
     listener: *wl.Listener(*wlr.Pointer.event.Button),
     event: *wlr.Pointer.event.Button,
@@ -169,6 +170,7 @@ fn handleButton(
     log.debug("{s}: {*}", .{ @src().fn_name, cursor });
 }
 
+// TODO
 fn handleFrame(listener: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("frame", listener);
     const seat = cursor.getSeat();
@@ -176,16 +178,17 @@ fn handleFrame(listener: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
     seat.wlr_seat.pointerNotifyFrame();
 }
 
+// TODO
 fn handleMotion(
     listener: *wl.Listener(*wlr.Pointer.event.Motion),
     event: *wlr.Pointer.event.Motion,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("motion", listener);
+    _ = cursor;
     _ = event;
-
-    log.debug("{s}: {*}", .{ @src().fn_name, cursor });
 }
 
+// TODO
 fn handleMotionAbsolute(
     listener: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
     event: *wlr.Pointer.event.MotionAbsolute,
@@ -315,6 +318,7 @@ fn handleHoldEnd(
     );
 }
 
+// TODO
 fn handleTouchUp(
     listener: *wl.Listener(*wlr.Touch.event.Up),
     event: *wlr.Touch.event.Up,
@@ -324,6 +328,7 @@ fn handleTouchUp(
     _ = event;
 }
 
+// TODO
 fn handleTouchDown(
     listener: *wl.Listener(*wlr.Touch.event.Down),
     event: *wlr.Touch.event.Down,
@@ -333,6 +338,7 @@ fn handleTouchDown(
     _ = event;
 }
 
+// TODO
 fn handleTouchMotion(
     listener: *wl.Listener(*wlr.Touch.event.Motion),
     event: *wlr.Touch.event.Motion,
@@ -342,6 +348,7 @@ fn handleTouchMotion(
     _ = event;
 }
 
+// TODO
 fn handleTouchCancel(
     listener: *wl.Listener(*wlr.Touch.event.Cancel),
     event: *wlr.Touch.event.Cancel,
@@ -351,6 +358,7 @@ fn handleTouchCancel(
     _ = event;
 }
 
+// TODO
 fn handleTouchFrame(listener: *wl.Listener(void)) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_frame", listener);
     const seat = cursor.getSeat();
@@ -358,6 +366,7 @@ fn handleTouchFrame(listener: *wl.Listener(void)) void {
     seat.wlr_seat.touchNotifyFrame();
 }
 
+// TODO
 fn handleTabletToolAxis(
     listener: *wl.Listener(*wlr.Tablet.event.Axis),
     event: *wlr.Tablet.event.Axis,
@@ -367,6 +376,7 @@ fn handleTabletToolAxis(
     _ = event;
 }
 
+// TODO
 fn handleTabletToolProximity(
     listener: *wl.Listener(*wlr.Tablet.event.Proximity),
     event: *wlr.Tablet.event.Proximity,
@@ -375,6 +385,8 @@ fn handleTabletToolProximity(
     _ = cursor;
     _ = event;
 }
+
+// TODO
 fn handleTabletToolTip(
     listener: *wl.Listener(*wlr.Tablet.event.Tip),
     event: *wlr.Tablet.event.Tip,
@@ -383,6 +395,8 @@ fn handleTabletToolTip(
     _ = cursor;
     _ = event;
 }
+
+// TODO
 fn handleTabletToolButton(
     listener: *wl.Listener(*wlr.Tablet.event.Button),
     event: *wlr.Tablet.event.Button,

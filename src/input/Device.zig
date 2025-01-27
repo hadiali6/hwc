@@ -10,7 +10,7 @@ const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const libinput = @import("libinput");
 
-const hwc = @import("root");
+const hwc = @import("hwc");
 const server = &hwc.server;
 
 const InternalDevice = union(wlr.InputDevice.Type) {

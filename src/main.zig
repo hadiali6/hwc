@@ -4,49 +4,51 @@ const heap = std.heap;
 
 const wlr = @import("wlroots");
 
+const hwc = @import("hwc");
 const api = @import("api.zig");
 
-pub const Server = @import("Server.zig");
-
-pub const desktop = struct {
-    pub const Focusable = union(enum) {
-        toplevel: *XdgToplevel,
-        layer_surface: *LayerSurface,
-        none,
-
-        pub fn wlrSurface(self: Focusable) ?*wlr.Surface {
-            return switch (self) {
-                .toplevel => |toplevel| toplevel.wlr_xdg_toplevel.base.surface,
-                .layer_surface => |layer_surface| layer_surface.wlr_layer_surface.surface,
-                .none => null,
-            };
-        }
-    };
-    pub const LayerSurface = @import("desktop/LayerSurface.zig");
-    pub const Output = @import("desktop/Output.zig");
-    pub const OutputManager = @import("desktop/OutputManager.zig");
-    pub const SurfaceManager = @import("desktop/SurfaceManager.zig");
-    pub const XdgPopup = @import("desktop/XdgPopup.zig");
-    pub const XdgToplevel = @import("desktop/XdgToplevel.zig");
-};
-
-pub const input = struct {
-    pub const Cursor = @import("input/Cursor.zig");
-    pub const Device = @import("input/Device.zig");
-    pub const Keyboard = @import("input/Keyboard.zig");
-    pub const Manager = @import("input/Manager.zig");
-    pub const Seat = @import("input/Seat.zig");
-};
-
-pub var server: Server = undefined;
-
 pub fn main() !void {
-    api.setupProcess();
+    api.process.setup();
     wlr.log.init(.info, null);
-    try server.init(heap.c_allocator);
-    try server.startSocket();
-    try api.spawn("hello-wayland");
-    try api.spawn("foot 2> /dev/null");
-    try server.start();
-    server.deinit();
+    try hwc.server.init(heap.c_allocator);
+    try hwc.server.startSocket();
+    try config();
+    try hwc.server.start();
+    hwc.server.deinit();
+}
+
+// for testing...
+fn config() !void {
+    try api.process.spawn("hello-wayland");
+    try api.process.spawn("foot 2> /dev/null");
+    try api.process.spawn("~/code/hwc-client/zig-out/bin/hwc-client");
+
+    _ = try hwc.server.wl_server.getEventLoop().addIdle(
+        ?*anyopaque,
+        struct {
+            fn callback(_: ?*anyopaque) void {
+                _ = api.output.createOutput(&hwc.server, 1920, 1080) catch |err| {
+                    log.err("{s} failed: '{}'", .{ @src().fn_name, err });
+                };
+            }
+        }.callback,
+        null,
+    );
+}
+
+test {
+    api.process.setup();
+    wlr.log.init(.info, null);
+    try hwc.server.init(std.testing.allocator);
+    try hwc.server.startSocket();
+    try config();
+    const source = try hwc.server.wl_server.getEventLoop().addTimer(?*anyopaque, struct {
+        fn w(_: ?*anyopaque) c_int {
+            std.posix.kill(std.os.linux.getpid(), std.posix.SIG.TERM) catch {};
+            return 0;
+        }
+    }.w, null);
+    _ = try source.timerUpdate(100);
+    try hwc.server.start();
+    hwc.server.deinit();
 }

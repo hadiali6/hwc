@@ -11,7 +11,7 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const hwc = @import("root");
+const hwc = @import("hwc");
 
 allocator: mem.Allocator,
 
@@ -52,6 +52,7 @@ wlr_viewporter: *wlr.Viewporter,
 output_manager: hwc.desktop.OutputManager,
 surface_manager: hwc.desktop.SurfaceManager,
 input_manager: hwc.input.Manager,
+status_manager: hwc.StatusManager,
 
 pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
     const wl_server = try wl.Server.create();
@@ -106,6 +107,7 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
         .output_manager = undefined,
         .surface_manager = undefined,
         .input_manager = undefined,
+        .status_manager = undefined,
     };
 
     if (wlr_renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
@@ -113,11 +115,13 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
         self.wlr_drm = try wlr.Drm.create(wl_server, wlr_renderer);
         self.wlr_linux_dmabuf =
             try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, wlr_renderer);
+        self.wlr_scene.setLinuxDmabufV1(self.wlr_linux_dmabuf.?);
     }
 
     try self.output_manager.init();
     try self.surface_manager.init();
     try self.input_manager.init();
+    try self.status_manager.init();
 
     wlr_renderer.events.lost.add(&self.renderer_lost);
 
@@ -175,14 +179,27 @@ fn handleGlobalFilter(
     wl_global: *const wl.Global,
     server: *hwc.Server,
 ) bool {
-    if (server.wlr_security_context_manager.lookupClient(wl_client) != null) {
+    if (server.wlr_security_context_manager.lookupClient(wl_client)) |wlr_security_context_state| {
         const allowed = server.isAllowed(wl_global);
         const blocked = server.isBlocked(wl_global);
+
+        log.debug("{s}: global='{s}' allowed='{}' sandbox_engine='{s}' app_id='{s}' instance_id='{s}'", .{
+            @src().fn_name,
+            wl_global.getInterface().name,
+            allowed,
+            wlr_security_context_state.app_id orelse "unknown",
+            wlr_security_context_state.app_id orelse "unknown",
+            wlr_security_context_state.instance_id orelse "unknown",
+        });
 
         assert(blocked != allowed);
 
         return allowed;
     } else {
+        log.debug(
+            "{s}: global='{s}' allowed='true'",
+            .{ @src().fn_name, wl_global.getInterface().name },
+        );
         return true;
     }
 }
@@ -215,10 +232,11 @@ fn isAllowed(self: *hwc.Server, wl_global: *const wl.Global) bool {
 }
 
 fn isBlocked(self: *hwc.Server, wl_global: *const wl.Global) bool {
-    return wl_global == self.surface_manager.wlr_foreign_toplevel_manager.global or
-        wl_global == self.output_manager.wlr_gamma_control_manager.global or
+    return wl_global == self.output_manager.wlr_gamma_control_manager.global or
         wl_global == self.output_manager.wlr_output_manager.global or
         wl_global == self.output_manager.wlr_output_power_manager.global or
+        wl_global == self.status_manager.global or
+        wl_global == self.surface_manager.wlr_foreign_toplevel_manager.global or
         wl_global == self.surface_manager.wlr_layer_shell.global or
         wl_global == self.wlr_data_control_manager.global or
         wl_global == self.wlr_export_dmabuf_manager.global or

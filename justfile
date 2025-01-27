@@ -1,5 +1,8 @@
 all: run
 
+test:
+    clear && zig build test -Dtarget=x86_64-linux-gnu -Dcpu=x86_64 --search-prefix /usr -freference-trace --summary all 
+
 build:
     clear && zig build -Dtarget=x86_64-linux-gnu -Dcpu=x86_64 --search-prefix /usr -freference-trace
 

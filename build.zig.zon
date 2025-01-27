@@ -5,8 +5,8 @@
 
     .dependencies = .{
         .@"zig-wayland" = .{
-            .url = "https://codeberg.org/ifreund/zig-wayland/archive/fbfe3b4ac0b472a27b1f1a67405436c58cbee12d.tar.gz",
-            .hash = "12209ca054cb1919fa276e328967f10b253f7537c4136eb48f3332b0f7cf661cad38",
+            .url = "https://codeberg.org/ifreund/zig-wayland/archive/a507358764d209627e6a555104099b0825d8934c.tar.gz",
+            .hash = "12204339bf0ea439f92ad54e220be6d42f15431f3d1cd107fb272d0b19a43d98ab17",
         },
         .@"zig-wlroots" = .{
             .url = "https://codeberg.org/ifreund/zig-wlroots/archive/7fd9f01746e25c5f623384ebc2e45632e4a60965.tar.gz",

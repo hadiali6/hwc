@@ -6,7 +6,7 @@ const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const hwc = @import("root");
+const hwc = @import("hwc");
 const server = &hwc.server;
 
 wlr_seat: *wlr.Seat,
@@ -32,6 +32,8 @@ pub fn init(self: *hwc.input.Seat, name: [*:0]const u8) !void {
         .cursor = undefined,
     };
 
+    self.wlr_seat.data = @intFromPtr(self);
+
     try self.cursor.init();
 
     self.wlr_seat.events.destroy.add(&self.destroy);
@@ -48,7 +50,18 @@ pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
         return;
     }
 
-    log.info("{s}: {s} -> {s}", .{ @src().fn_name, @tagName(self.focused), @tagName(target) });
+    {
+        var focused_buffer: [1024]u8 = undefined;
+        var target_buffer: [1024]u8 = undefined;
+
+        log.info("{s}: {s}{s} -> {s}{s}", .{
+            @src().fn_name,
+            @tagName(self.focused),
+            self.focused.status(&focused_buffer) catch "unknown",
+            @tagName(target),
+            target.status(&target_buffer) catch "unknown",
+        });
+    }
 
     switch (self.focused) {
         .toplevel => |toplevel| {
@@ -164,6 +177,7 @@ fn handleRequestSetPrimarySelection(
     seat.wlr_seat.setPrimarySelection(event.source, event.serial);
 }
 
+// TODO
 fn handleRequestStartDrag(
     listener: *wl.Listener(*wlr.Seat.event.RequestStartDrag),
     event: *wlr.Seat.event.RequestStartDrag,
@@ -173,6 +187,7 @@ fn handleRequestStartDrag(
     _ = event;
 }
 
+// TODO
 fn handleStartDrag(
     listener: *wl.Listener(*wlr.Drag),
     wlr_drag: *wlr.Drag,
@@ -182,6 +197,7 @@ fn handleStartDrag(
     _ = wlr_drag;
 }
 
+// TODO
 fn handleDragDestroy(
     listener: *wl.Listener(*wlr.Drag),
     wlr_drag: *wlr.Drag,

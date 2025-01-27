@@ -9,7 +9,7 @@ const wl = wayland.server.wl;
 const zwlr = wayland.server.zwlr;
 const wlr = @import("wlroots");
 
-const hwc = @import("root");
+const hwc = @import("hwc");
 const server = &hwc.server;
 
 link: wl.list.Link,
@@ -29,7 +29,7 @@ frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleFrame),
 request_state: wl.Listener(*wlr.Output.event.RequestState) =
     wl.Listener(*wlr.Output.event.RequestState).init(handleRequestState),
 
-pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
+pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.Output {
     const output = try allocator.create(hwc.desktop.Output);
     errdefer allocator.destroy(output);
 
@@ -102,6 +102,7 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
             .popups = try server.wlr_scene.tree.createSceneTree(),
         },
     };
+
     errdefer {
         output.layers.background.node.destroy();
         output.layers.bottom.node.destroy();
@@ -110,18 +111,25 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !void {
         output.layers.popups.node.destroy();
     }
 
+    _ = try server.output_manager.wlr_output_layout.addAuto(wlr_output);
+    errdefer server.output_manager.wlr_output_layout.remove(wlr_output);
+
+    {
+        var box: wlr.Box = undefined;
+        server.output_manager.wlr_output_layout.getBox(output.wlr_output, &box);
+
+        wlr_scene_output.setPosition(box.x, box.y);
+    }
+
     wlr_output.data = @intFromPtr(output);
 
     wlr_output.events.destroy.add(&output.destroy);
     wlr_output.events.frame.add(&output.frame);
     wlr_output.events.request_state.add(&output.request_state);
 
-    _ = try server.output_manager.wlr_output_layout.addAuto(wlr_output);
-    errdefer server.output_manager.wlr_output_layout.remove(wlr_output);
-
-    server.output_manager.outputs.prepend(output);
-
     log.info("{s}: name='{s}'", .{ @src().fn_name, wlr_output.name });
+
+    return output;
 }
 
 pub fn layerSurfaceTree(self: hwc.desktop.Output, layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
