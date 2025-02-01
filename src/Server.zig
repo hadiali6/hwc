@@ -32,8 +32,6 @@ renderer_lost: wl.Listener(void) = wl.Listener(void).init(handleRendererLost),
 wlr_drm: ?*wlr.Drm = null,
 wlr_linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
 
-wlr_scene: *wlr.Scene,
-
 wlr_compositor: *wlr.Compositor,
 wlr_subcompositor: *wlr.Subcompositor,
 wlr_data_device_manager: *wlr.DataDeviceManager,
@@ -87,8 +85,6 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
         .wlr_allocator = try wlr.Allocator.autocreate(wlr_backend, wlr_renderer),
         .wlr_shm = try wlr.Shm.createWithRenderer(wl_server, 2, wlr_renderer),
 
-        .wlr_scene = try wlr.Scene.create(),
-
         .wlr_compositor = try wlr.Compositor.create(wl_server, 6, wlr_renderer),
         .wlr_subcompositor = try wlr.Subcompositor.create(wl_server),
         .wlr_data_device_manager = try wlr.DataDeviceManager.create(wl_server),
@@ -110,16 +106,17 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
         .status_manager = undefined,
     };
 
+    try self.surface_manager.init();
+
     if (wlr_renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
         // TODO: remove because wl_drm is a legacy interface
         self.wlr_drm = try wlr.Drm.create(wl_server, wlr_renderer);
         self.wlr_linux_dmabuf =
             try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, wlr_renderer);
-        self.wlr_scene.setLinuxDmabufV1(self.wlr_linux_dmabuf.?);
+        self.surface_manager.wlr_scene.setLinuxDmabufV1(self.wlr_linux_dmabuf.?);
     }
 
     try self.output_manager.init();
-    try self.surface_manager.init();
     try self.input_manager.init();
     try self.status_manager.init();
 
@@ -145,11 +142,9 @@ pub fn deinit(self: *hwc.Server) void {
 
     assert(self.output_manager.outputs.empty());
 
-    self.wlr_scene.tree.node.destroy();
+    self.surface_manager.deinit();
     self.wlr_renderer.destroy();
     self.wlr_allocator.destroy();
-
-    self.surface_manager.deinit();
 
     self.wl_server.destroy();
 
@@ -216,6 +211,7 @@ fn isAllowed(self: *hwc.Server, wl_global: *const wl.Global) bool {
     return mem.orderZ(u8, wl_global.getInterface().name, "wl_output") == .eq or
         mem.orderZ(u8, wl_global.getInterface().name, "wl_seat") == .eq or
         wl_global == self.input_manager.wlr_pointer_gestures.global or
+        wl_global == self.input_manager.wlr_relative_pointer_manager.global or
         wl_global == self.output_manager.wlr_presentation.global or
         wl_global == self.output_manager.wlr_xdg_output_manager.global or
         wl_global == self.surface_manager.wlr_xdg_shell.global or

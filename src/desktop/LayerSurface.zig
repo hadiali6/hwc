@@ -38,6 +38,17 @@ pub fn create(allocator: mem.Allocator, wlr_layer_surface: *wlr.LayerSurfaceV1) 
         .popup_tree = try output.layers.popups.createSceneTree(),
     };
 
+    try hwc.desktop.SceneDescriptor.create(
+        allocator,
+        &layer_surface.wlr_scene_layer_surface.tree.node,
+        .{ .layer_surface = layer_surface },
+    );
+    try hwc.desktop.SceneDescriptor.create(
+        allocator,
+        &layer_surface.popup_tree.node,
+        .{ .layer_surface = layer_surface },
+    );
+
     wlr_layer_surface.events.destroy.add(&layer_surface.destroy);
     wlr_layer_surface.events.new_popup.add(&layer_surface.new_popup);
     wlr_layer_surface.surface.events.map.add(&layer_surface.map);

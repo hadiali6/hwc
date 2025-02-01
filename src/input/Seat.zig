@@ -153,7 +153,7 @@ fn handleRequestSetCursor(
     const seat: *hwc.input.Seat = @fieldParentPtr("request_set_cursor", listener);
 
     if (seat.wlr_seat.pointer_state.focused_client == event.seat_client) {
-        log.info("{s}: {*} set cursor", .{ @src().fn_name, event.seat_client });
+        log.info("{s}: {*}", .{ @src().fn_name, event.seat_client });
 
         seat.cursor.wlr_cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
     }

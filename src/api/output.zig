@@ -48,7 +48,7 @@ const Data = struct {
     }
 };
 
-pub fn createOutput(server: *hwc.Server, width: c_uint, height: c_uint) !*wlr.Output {
+pub fn create(server: *hwc.Server, width: c_uint, height: c_uint) !*wlr.Output {
     assert(server.wlr_backend.isMulti());
 
     var result = Data{

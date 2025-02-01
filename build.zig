@@ -111,6 +111,7 @@ pub fn build(b: *std.Build) void {
         hwc_exe_unit_tests.linkSystemLibrary("xkbcommon");
 
         const run_exe_unit_tests = b.addRunArtifact(hwc_exe_unit_tests);
+        run_exe_unit_tests.has_side_effects = true;
 
         const test_step = b.step("test", "Run unit tests");
         test_step.dependOn(&run_exe_unit_tests.step);

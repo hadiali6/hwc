@@ -39,6 +39,7 @@ pub const desktop = struct {
     pub const LayerSurface = @import("desktop/LayerSurface.zig");
     pub const Output = @import("desktop/Output.zig");
     pub const OutputManager = @import("desktop/OutputManager.zig");
+    pub const SceneDescriptor = @import("desktop/SceneDescriptor.zig");
     pub const SurfaceManager = @import("desktop/SurfaceManager.zig");
     pub const XdgPopup = @import("desktop/XdgPopup.zig");
     pub const XdgToplevel = @import("desktop/XdgToplevel.zig");
@@ -50,4 +51,6 @@ pub const input = struct {
     pub const Keyboard = @import("input/Keyboard.zig");
     pub const Manager = @import("input/Manager.zig");
     pub const Seat = @import("input/Seat.zig");
+
+    pub const util = @import("input/util.zig");
 };

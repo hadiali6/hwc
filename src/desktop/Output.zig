@@ -86,7 +86,7 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.O
         }
     }
 
-    const wlr_scene_output = try server.wlr_scene.createSceneOutput(wlr_output);
+    const wlr_scene_output = try server.surface_manager.wlr_scene.createSceneOutput(wlr_output);
     errdefer wlr_scene_output.destroy();
 
     output.* = .{
@@ -95,11 +95,11 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.O
         .wlr_scene_output = wlr_scene_output,
 
         .layers = .{
-            .background = try server.wlr_scene.tree.createSceneTree(),
-            .bottom = try server.wlr_scene.tree.createSceneTree(),
-            .top = try server.wlr_scene.tree.createSceneTree(),
-            .overlay = try server.wlr_scene.tree.createSceneTree(),
-            .popups = try server.wlr_scene.tree.createSceneTree(),
+            .background = try server.surface_manager.wlr_scene.tree.createSceneTree(),
+            .bottom = try server.surface_manager.wlr_scene.tree.createSceneTree(),
+            .top = try server.surface_manager.wlr_scene.tree.createSceneTree(),
+            .overlay = try server.surface_manager.wlr_scene.tree.createSceneTree(),
+            .popups = try server.surface_manager.wlr_scene.tree.createSceneTree(),
         },
     };
 
@@ -163,7 +163,7 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) v
 }
 
 fn handleFrame(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
-    const wlr_scene_output = server.wlr_scene.getSceneOutput(wlr_output).?;
+    const wlr_scene_output = server.surface_manager.wlr_scene.getSceneOutput(wlr_output).?;
 
     _ = blk: {
         if (!wlr_output.needs_frame and !wlr_scene_output.pending_commit_damage.notEmpty()) {

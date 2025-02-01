@@ -41,11 +41,11 @@ pub fn create(
     const toplevel = try allocator.create(hwc.desktop.XdgToplevel);
     errdefer allocator.destroy(toplevel);
 
-    const surface_tree = try server.wlr_scene.tree.createSceneTree();
+    const surface_tree = try server.surface_manager.wlr_scene.tree.createSceneTree();
     errdefer surface_tree.node.destroy();
 
     // TODO: use current outputs popup layer
-    const popup_tree = try server.wlr_scene.tree.createSceneTree();
+    const popup_tree = try server.surface_manager.wlr_scene.tree.createSceneTree();
     errdefer popup_tree.node.destroy();
 
     toplevel.* = .{
@@ -54,6 +54,9 @@ pub fn create(
         .surface_tree = surface_tree,
         .popup_tree = popup_tree,
     };
+
+    try hwc.desktop.SceneDescriptor.create(allocator, &surface_tree.node, .{ .toplevel = toplevel });
+    try hwc.desktop.SceneDescriptor.create(allocator, &popup_tree.node, .{ .toplevel = toplevel });
 
     wlr_xdg_toplevel.base.surface.events.unmap.add(&toplevel.unmap);
     errdefer toplevel.unmap.link.remove();

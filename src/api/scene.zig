@@ -2,7 +2,7 @@ const std = @import("std");
 
 const wlr = @import("wlroots");
 
-pub fn dumpScene(node: *wlr.SceneNode) void {
+pub fn dump(node: *wlr.SceneNode) void {
     dumpNode(node, null, node.x, node.y);
 }
 
@@ -30,20 +30,20 @@ fn dumpNode(node: *wlr.SceneNode, parent: ?*PrefixStack, x: c_int, y: c_int) voi
 
     switch (node.type) {
         .tree => std.debug.print(
-            "tree {},{} ({x})\n",
+            "[tree] {},{} ({x})\n",
             .{ x, y, @intFromPtr(node) },
         ),
         .rect => {
             const rect = wlr.SceneRect.fromNode(node);
             std.debug.print(
-                "rect {},{} {}x{} ({x})\n",
+                "[rect] {},{} {}x{} ({x})\n",
                 .{ x, y, rect.width, rect.height, @intFromPtr(node) },
             );
         },
         .buffer => {
             const buffer = wlr.SceneBuffer.fromNode(node);
             std.debug.print(
-                "rect {},{} {}x{} ({x})\n",
+                "[buffer] {},{} {}x{} ({x})\n",
                 .{ x, y, buffer.dst_width, buffer.dst_height, @intFromPtr(node) },
             );
         },
@@ -54,7 +54,10 @@ fn dumpNode(node: *wlr.SceneNode, parent: ?*PrefixStack, x: c_int, y: c_int) voi
     }
 
     const tree: *wlr.SceneTree = @alignCast(@ptrCast(node));
-    var stack = PrefixStack{ .parent = parent, .more_children = undefined };
+    var stack = PrefixStack{
+        .parent = parent,
+        .more_children = undefined,
+    };
     var it = tree.children.iterator(.forward);
     while (it.next()) |child| {
         if (@intFromPtr(child.link.next.?) == @intFromPtr(&tree.children)) {
