@@ -31,11 +31,15 @@ pub fn create(
 
     wlr_scene_node.events.destroy.add(&scene_descriptor.destroy);
 
-    log.info("{s}: {s}: [{s}]", .{
-        @src().fn_name,
-        @tagName(focusable),
-        focusable.status(&[_]u8{} ** 1024) catch "unknown",
-    });
+    {
+        var buffer: [1024]u8 = undefined;
+
+        log.info("{s}: {s}:{!s}", .{
+            @src().fn_name,
+            @tagName(focusable),
+            focusable.status(&buffer),
+        });
+    }
 }
 
 pub fn fromNode(wlr_scene_node: *wlr.SceneNode) ?*hwc.desktop.SceneDescriptor {
@@ -68,11 +72,15 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     scene_descriptor.destroy.link.remove();
     scene_descriptor.wlr_scene_node.data = 0;
 
-    log.info("{s}: {s}: [{s}]", .{
-        @src().fn_name,
-        @tagName(scene_descriptor.focusable),
-        scene_descriptor.focusable.status(&[_]u8{} ** 1024) catch "unknown",
-    });
+    {
+        var buffer: [1024]u8 = undefined;
+
+        log.info("{s}: {s}:{!s}", .{
+            @src().fn_name,
+            @tagName(scene_descriptor.focusable),
+            scene_descriptor.focusable.status(&buffer),
+        });
+    }
 
     server.allocator.destroy(scene_descriptor);
 }

@@ -152,10 +152,8 @@ pub fn deinit(self: *hwc.Server) void {
 }
 
 pub fn startSocket(self: *hwc.Server) !void {
-    const socket = blk: {
-        var buf: [11]u8 = undefined;
-        break :blk try self.wl_server.addSocketAuto(&buf);
-    };
+    var buffer: [11]u8 = undefined;
+    const socket = try self.wl_server.addSocketAuto(&buffer);
 
     if (libc.setenv("WAYLAND_DISPLAY", socket.ptr, 1) < 0) {
         return error.SetenvFailed;

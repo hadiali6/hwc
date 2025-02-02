@@ -1,8 +1,6 @@
 const std = @import("std");
 const log = std.log.scoped(.@"input.Manager");
 const mem = std.mem;
-const fmt = std.fmt;
-const ascii = std.ascii;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;

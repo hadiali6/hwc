@@ -54,12 +54,12 @@ pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
         var focused_buffer: [1024]u8 = undefined;
         var target_buffer: [1024]u8 = undefined;
 
-        log.info("{s}: {s}{s} -> {s}{s}", .{
+        log.info("{s}: {s}{!s} -> {s}{!s}", .{
             @src().fn_name,
             @tagName(self.focused),
-            self.focused.status(&focused_buffer) catch "unknown",
+            self.focused.status(&focused_buffer),
             @tagName(target),
-            target.status(&target_buffer) catch "unknown",
+            target.status(&target_buffer),
         });
     }
 

@@ -34,17 +34,17 @@ fn dumpNode(node: *wlr.SceneNode, parent: ?*PrefixStack, x: c_int, y: c_int) voi
             .{ x, y, @intFromPtr(node) },
         ),
         .rect => {
-            const rect = wlr.SceneRect.fromNode(node);
+            const wlr_scene_rect = wlr.SceneRect.fromNode(node);
             std.debug.print(
                 "[rect] {},{} {}x{} ({x})\n",
-                .{ x, y, rect.width, rect.height, @intFromPtr(node) },
+                .{ x, y, wlr_scene_rect.width, wlr_scene_rect.height, @intFromPtr(node) },
             );
         },
         .buffer => {
-            const buffer = wlr.SceneBuffer.fromNode(node);
+            const wlr_scene_buffer = wlr.SceneBuffer.fromNode(node);
             std.debug.print(
                 "[buffer] {},{} {}x{} ({x})\n",
-                .{ x, y, buffer.dst_width, buffer.dst_height, @intFromPtr(node) },
+                .{ x, y, wlr_scene_buffer.dst_width, wlr_scene_buffer.dst_height, @intFromPtr(node) },
             );
         },
     }

@@ -18,6 +18,7 @@ const Source = enum {
     sound,
 };
 
+/// For logging purposes
 pub fn linuxInputEventCodeToString(source: Source, code: u32) ?[]const u8 {
     return switch (source) {
         .input_properties => return inputProperties(code),

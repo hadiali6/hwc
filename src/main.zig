@@ -27,15 +27,15 @@ pub fn main() !void {
 
 // for testing...
 fn config() !void {
-    try api.process.spawn("hello-wayland");
+    // try api.process.spawn("hello-wayland");
     try api.process.spawn("foot 2> /dev/null");
-    try api.process.spawn("~/code/hwc-client/zig-out/bin/hwc-client");
+    // try api.process.spawn("~/code/hwc-client/zig-out/bin/hwc-client");
 
     _ = try hwc.server.wl_server.getEventLoop().addIdle(?*anyopaque, struct {
         fn callback(_: ?*anyopaque) void {
-            // _ = api.output.create(&hwc.server, 1920, 1080) catch |err| {
-            //     log.err("{s} failed: '{}'", .{ @src().fn_name, err });
-            // };
+            _ = api.output.create(&hwc.server, 1920, 1080) catch |err| {
+                log.err("{s} failed: '{}'", .{ @src().fn_name, err });
+            };
         }
     }.callback, null);
 }

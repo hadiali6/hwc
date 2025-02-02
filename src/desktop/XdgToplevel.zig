@@ -13,6 +13,10 @@ link: wl.list.Link,
 wlr_xdg_toplevel: *wlr.XdgToplevel,
 surface_tree: *wlr.SceneTree,
 popup_tree: *wlr.SceneTree,
+output_tracker: *wlr.SceneBuffer,
+
+x: i32 = 0,
+y: i32 = 0,
 
 // listeners that are always active over the toplevel's lifetime
 destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
@@ -34,6 +38,15 @@ request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
 set_title: wl.Listener(void) = wl.Listener(void).init(handleSetTitle),
 set_app_id: wl.Listener(void) = wl.Listener(void).init(handleSetAppId),
 
+buffer_outputs_update: wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate) =
+    wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate).init(handleBufferOutputsUpdate),
+buffer_output_enter: wl.Listener(*wlr.SceneOutput) =
+    wl.Listener(*wlr.SceneOutput).init(handleBufferOutputEnter),
+buffer_output_leave: wl.Listener(*wlr.SceneOutput) =
+    wl.Listener(*wlr.SceneOutput).init(handleBufferOutputLeave),
+buffer_output_sample: wl.Listener(*wlr.SceneBuffer.event.OutputSample) =
+    wl.Listener(*wlr.SceneBuffer.event.OutputSample).init(handleBufferOutputSample),
+
 pub fn create(
     allocator: mem.Allocator,
     wlr_xdg_toplevel: *wlr.XdgToplevel,
@@ -53,6 +66,7 @@ pub fn create(
         .wlr_xdg_toplevel = wlr_xdg_toplevel,
         .surface_tree = surface_tree,
         .popup_tree = popup_tree,
+        .output_tracker = try surface_tree.createSceneBuffer(null),
     };
 
     try hwc.desktop.SceneDescriptor.create(allocator, &surface_tree.node, .{ .toplevel = toplevel });
@@ -69,11 +83,15 @@ pub fn create(
     wlr_xdg_toplevel.base.surface.events.commit.add(&toplevel.commit);
     wlr_xdg_toplevel.base.events.new_popup.add(&toplevel.new_popup);
 
-    log.info("{s}: app_id='{s}' title='{s}'", .{
-        @src().fn_name,
-        toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
-        toplevel.wlr_xdg_toplevel.title orelse "unknown",
-    });
+    toplevel.output_tracker.events.outputs_update.add(&toplevel.buffer_outputs_update);
+    toplevel.output_tracker.events.output_enter.add(&toplevel.buffer_output_enter);
+    toplevel.output_tracker.events.output_leave.add(&toplevel.buffer_output_leave);
+    toplevel.output_tracker.events.output_sample.add(&toplevel.buffer_output_sample);
+
+    log.info(
+        "{s}: app_id='{?s}' title='{?s}'",
+        .{ @src().fn_name, toplevel.wlr_xdg_toplevel.app_id, toplevel.wlr_xdg_toplevel.title },
+    );
 
     return toplevel;
 }
@@ -101,11 +119,10 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     toplevel.commit.link.remove();
     toplevel.new_popup.link.remove();
 
-    log.info("{s}: app_id='{s}' title='{s}'", .{
-        @src().fn_name,
-        toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
-        toplevel.wlr_xdg_toplevel.title orelse "unknown",
-    });
+    log.info(
+        "{s}: app_id='{?s}' title='{?s}'",
+        .{ @src().fn_name, toplevel.wlr_xdg_toplevel.app_id, toplevel.wlr_xdg_toplevel.title },
+    );
 
     server.allocator.destroy(toplevel);
 }
@@ -117,6 +134,7 @@ fn handleMap(listener: *wl.Listener(void)) void {
     server.input_manager.default_seat.focus(.{ .toplevel = toplevel });
 
     // add listeners that are only active while mapped
+
     toplevel.wlr_xdg_toplevel.base.events.ack_configure.add(&toplevel.ack_configure);
     toplevel.wlr_xdg_toplevel.events.request_fullscreen.add(&toplevel.request_fullscreen);
     toplevel.wlr_xdg_toplevel.events.request_maximize.add(&toplevel.request_maximize);
@@ -126,19 +144,18 @@ fn handleMap(listener: *wl.Listener(void)) void {
     toplevel.wlr_xdg_toplevel.events.set_title.add(&toplevel.set_title);
     toplevel.wlr_xdg_toplevel.events.set_app_id.add(&toplevel.set_app_id);
 
-    log.info("{s}: app_id='{s}' title='{s}'", .{
-        @src().fn_name,
-        toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
-        toplevel.wlr_xdg_toplevel.title orelse "unknown",
-    });
+    log.info(
+        "{s}: app_id='{?s}' title='{?s}'",
+        .{ @src().fn_name, toplevel.wlr_xdg_toplevel.app_id, toplevel.wlr_xdg_toplevel.title },
+    );
 }
 
 // TODO
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("unmap", listener);
-    _ = toplevel.wlr_xdg_toplevel.setActivated(false);
 
     // remove listeners that are only active while mapped
+
     toplevel.ack_configure.link.remove();
     toplevel.request_fullscreen.link.remove();
     toplevel.request_maximize.link.remove();
@@ -148,11 +165,15 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     toplevel.set_title.link.remove();
     toplevel.set_app_id.link.remove();
 
-    log.info("{s}: app_id='{s}' title='{s}'", .{
-        @src().fn_name,
-        toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
-        toplevel.wlr_xdg_toplevel.title orelse "unknown",
-    });
+    toplevel.buffer_outputs_update.link.remove();
+    toplevel.buffer_output_enter.link.remove();
+    toplevel.buffer_output_leave.link.remove();
+    toplevel.buffer_output_sample.link.remove();
+
+    log.info(
+        "{s}: app_id='{?s}' title='{?s}'",
+        .{ @src().fn_name, toplevel.wlr_xdg_toplevel.app_id, toplevel.wlr_xdg_toplevel.title },
+    );
 }
 
 // TODO
@@ -174,7 +195,10 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.Xdg
         toplevel.popup_tree,
     ) catch |err| {
         log.err("{s} failed: '{}'", .{ @src().fn_name, err });
-        wlr_xdg_popup.resource.postNoMemory();
+
+        if (err == error.OutOfMemory) {
+            wlr_xdg_popup.resource.postNoMemory();
+        }
     };
 }
 
@@ -206,24 +230,73 @@ fn handleRequestMinimize(listener: *wl.Listener(void)) void {
     _ = toplevel;
 }
 
-// TODO
+// TODO (hacky)
 fn handleRequestMove(
     listener: *wl.Listener(*wlr.XdgToplevel.event.Move),
-    event: *wlr.XdgToplevel.event.Move,
+    _: *wlr.XdgToplevel.event.Move,
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_move", listener);
-    _ = toplevel;
-    _ = event;
+    var cursor = &server.input_manager.default_seat.cursor;
+
+    log.info("{s}: [BEFORE MOVE] x='{}' y='{}' app_id='{?s}' title='{?s}'", .{
+        @src().fn_name,
+        cursor.grab_x,
+        cursor.grab_y,
+        toplevel.wlr_xdg_toplevel.app_id,
+        toplevel.wlr_xdg_toplevel.title,
+    });
+
+    cursor.mode = .{ .move = toplevel };
+    cursor.grab_x = cursor.wlr_cursor.x - @as(f64, @floatFromInt(toplevel.x));
+    cursor.grab_y = cursor.wlr_cursor.y - @as(f64, @floatFromInt(toplevel.y));
+
+    log.info("{s}: [AFTER MOVE] x='{}' y='{}' app_id='{?s}' title='{?s}'", .{
+        @src().fn_name,
+        cursor.grab_x,
+        cursor.grab_y,
+        toplevel.wlr_xdg_toplevel.app_id,
+        toplevel.wlr_xdg_toplevel.title,
+    });
 }
 
-// TODO
+// TODO (hacky)
 fn handleRequestResize(
     listener: *wl.Listener(*wlr.XdgToplevel.event.Resize),
     event: *wlr.XdgToplevel.event.Resize,
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_resize", listener);
-    _ = toplevel;
-    _ = event;
+    var cursor = &server.input_manager.default_seat.cursor;
+
+    log.debug("{s}: [BEFORE RESIZE] x='{}' y='{}' app_id='{?s}' title='{?s}'", .{
+        @src().fn_name,
+        cursor.grab_x,
+        cursor.grab_y,
+        toplevel.wlr_xdg_toplevel.app_id,
+        toplevel.wlr_xdg_toplevel.title,
+    });
+
+    cursor.mode = .{ .resize = toplevel };
+    cursor.resize_edges = event.edges;
+
+    var box: wlr.Box = undefined;
+    toplevel.wlr_xdg_toplevel.base.getGeometry(&box);
+
+    const border_x = toplevel.x + box.x + if (event.edges.right) box.width else 0;
+    const border_y = toplevel.y + box.y + if (event.edges.bottom) box.height else 0;
+    cursor.grab_x = cursor.wlr_cursor.x - @as(f64, @floatFromInt(border_x));
+    cursor.grab_y = cursor.wlr_cursor.y - @as(f64, @floatFromInt(border_y));
+
+    cursor.grab_box = box;
+    cursor.grab_box.x += toplevel.x;
+    cursor.grab_box.y += toplevel.y;
+
+    log.info("{s}: [AFTER RESIZE] x='{}' y='{}' app_id='{?s}' title='{?s}'", .{
+        @src().fn_name,
+        cursor.grab_x,
+        cursor.grab_y,
+        toplevel.wlr_xdg_toplevel.app_id,
+        toplevel.wlr_xdg_toplevel.title,
+    });
 }
 
 // TODO
@@ -236,4 +309,60 @@ fn handleSetTitle(listener: *wl.Listener(void)) void {
 fn handleSetAppId(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("set_app_id", listener);
     _ = toplevel;
+}
+
+fn handleBufferOutputsUpdate(
+    listener: *wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate),
+    event: *wlr.SceneBuffer.event.OutputsUpdate,
+) void {
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_outputs_update", listener);
+
+    log.info("{s}: '{}' app_id='{?s}' title='{?s}'", .{
+        @src().fn_name,
+        event.*,
+        toplevel.wlr_xdg_toplevel.app_id,
+        toplevel.wlr_xdg_toplevel.title,
+    });
+}
+
+fn handleBufferOutputEnter(
+    listener: *wl.Listener(*wlr.SceneOutput),
+    wlr_scene_output: *wlr.SceneOutput,
+) void {
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_output_enter", listener);
+
+    log.info("{s}: '{}' app_id='{?s}' title='{?s}'", .{
+        @src().fn_name,
+        wlr_scene_output.*,
+        toplevel.wlr_xdg_toplevel.app_id,
+        toplevel.wlr_xdg_toplevel.title,
+    });
+}
+
+fn handleBufferOutputLeave(
+    listener: *wl.Listener(*wlr.SceneOutput),
+    wlr_scene_output: *wlr.SceneOutput,
+) void {
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_output_leave", listener);
+
+    log.info("{s}: '{}' app_id='{?s}' title='{?s}'", .{
+        @src().fn_name,
+        wlr_scene_output.*,
+        toplevel.wlr_xdg_toplevel.app_id,
+        toplevel.wlr_xdg_toplevel.title,
+    });
+}
+
+fn handleBufferOutputSample(
+    listener: *wl.Listener(*wlr.SceneBuffer.event.OutputSample),
+    event: *wlr.SceneBuffer.event.OutputSample,
+) void {
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_output_sample", listener);
+
+    log.info("{s}: '{}' app_id='{?s}' title='{?s}'", .{
+        @src().fn_name,
+        event.*,
+        toplevel.wlr_xdg_toplevel.app_id,
+        toplevel.wlr_xdg_toplevel.title,
+    });
 }

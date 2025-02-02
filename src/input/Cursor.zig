@@ -1,6 +1,6 @@
 const std = @import("std");
 const log = std.log.scoped(.@"input.Cursor");
-const assert = std.debug.assert;
+const mem = std.mem;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
@@ -14,7 +14,14 @@ wlr_xcursor_manager: *wlr.XcursorManager,
 
 mode: union(enum) {
     passthrough,
+    move: *hwc.desktop.XdgToplevel,
+    resize: *hwc.desktop.XdgToplevel,
 } = .passthrough,
+
+grab_x: f64 = 0,
+grab_y: f64 = 0,
+grab_box: wlr.Box = undefined,
+resize_edges: wlr.Edges = .{},
 
 axis: wl.Listener(*wlr.Pointer.event.Axis) = wl.Listener(*wlr.Pointer.event.Axis).init(handleAxis),
 button: wl.Listener(*wlr.Pointer.event.Button) =
@@ -137,6 +144,8 @@ fn handleAxis(
     const cursor: *hwc.input.Cursor = @fieldParentPtr("axis", listener);
     const seat = cursor.getSeat();
 
+    // TODO pointer scroll wheel binding
+
     seat.wlr_seat.pointerNotifyAxis(
         event.time_msec,
         event.orientation,
@@ -146,10 +155,15 @@ fn handleAxis(
         event.relative_direction,
     );
 
-    log.debug("{s}: {*}", .{ @src().fn_name, cursor });
+    log.debug("{s}: '{s}' orientation='{s}' source='{s}' relative_direction='{s}'", .{
+        @src().fn_name,
+        if (event.delta_discrete > 0) "scroll down" else "scroll up",
+        @tagName(event.orientation),
+        @tagName(event.source),
+        @tagName(event.relative_direction),
+    });
 }
 
-// TODO
 fn handleButton(
     listener: *wl.Listener(*wlr.Pointer.event.Button),
     event: *wlr.Pointer.event.Button,
@@ -157,41 +171,30 @@ fn handleButton(
     const cursor: *hwc.input.Cursor = @fieldParentPtr("button", listener);
     const seat = cursor.getSeat();
 
-    switch (event.state) {
-        .released => {
-            cursor.mode = .passthrough;
-        },
-        .pressed => {
-            if (server.surface_manager.resultAt(cursor.wlr_cursor.x, cursor.wlr_cursor.y)) |result| {
-                if (hwc.desktop.SceneDescriptor.fromNode(result.wlr_scene_node)) |scene_descriptor| {
-                    seat.focus(scene_descriptor.focusable);
-                }
-            }
-        },
-        else => unreachable,
+    _ = seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
+    if (event.state == .released) {
+        cursor.mode = .passthrough;
+    } else if (server.surface_manager.resultAt(cursor.wlr_cursor.x, cursor.wlr_cursor.y)) |result| {
+        if (hwc.desktop.SceneDescriptor.fromNode(result.wlr_scene_node)) |scene_descriptor| {
+            seat.focus(scene_descriptor.focusable);
+        }
     }
-
-    log.debug("{s}: button='{?s} state='{s}'", .{
-        @src().fn_name,
-        hwc.input.util.linuxInputEventCodeToString(.pointer, event.button),
-        @tagName(event.state),
-    });
 }
 
 fn handleFrame(listener: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("frame", listener);
     const seat = cursor.getSeat();
-
     seat.wlr_seat.pointerNotifyFrame();
 }
 
-// TODO
+// TODO (hacky)
 fn handleMotion(
     listener: *wl.Listener(*wlr.Pointer.event.Motion),
     event: *wlr.Pointer.event.Motion,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("motion", listener);
 
+    cursor.wlr_cursor.move(event.device, event.delta_x, event.delta_y);
     cursor.processMotion(
         event.device,
         event.time_msec,
@@ -202,64 +205,122 @@ fn handleMotion(
     );
 }
 
-// TODO
+// TODO (hacky)
 fn handleMotionAbsolute(
     listener: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
     event: *wlr.Pointer.event.MotionAbsolute,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("motion_absolute", listener);
 
-    var lx: f64 = undefined;
-    var ly: f64 = undefined;
-    cursor.wlr_cursor.absoluteToLayoutCoords(event.device, event.x, event.y, &lx, &ly);
+    // var lx: f64 = undefined;
+    // var ly: f64 = undefined;
+    // cursor.wlr_cursor.absoluteToLayoutCoords(event.device, event.x, event.y, &lx, &ly);
+    //
+    // const dx = lx - cursor.wlr_cursor.x;
+    // const dy = ly - cursor.wlr_cursor.y;
 
-    const dx = ly - cursor.wlr_cursor.x;
-    const dy = ly - cursor.wlr_cursor.y;
-    cursor.processMotion(event.device, event.time_msec, dx, dy, dx, dy);
+    cursor.wlr_cursor.warpAbsolute(event.device, event.x, event.y);
+    cursor.processMotion(event.device, event.time_msec, event.x, event.y, event.x, event.y);
 }
 
+// TODO (hacky)
 fn processMotion(
     self: *hwc.input.Cursor,
-    device: *wlr.InputDevice,
-    time: u32,
+    wlr_input_device: *wlr.InputDevice,
+    time_msec: u32,
     delta_x: f64,
     delta_y: f64,
     unaccel_dx: f64,
     unaccel_dy: f64,
 ) void {
-    const seat = self.getSeat();
+    _ = wlr_input_device;
+    _ = delta_x;
+    _ = delta_y;
+    _ = unaccel_dx;
+    _ = unaccel_dy;
 
-    server.input_manager.wlr_relative_pointer_manager.sendRelativeMotion(
-        seat.wlr_seat,
-        @as(u64, time) * 1000,
-        delta_x,
-        delta_y,
-        unaccel_dx,
-        unaccel_dy,
-    );
+    // const seat = self.getSeat();
+
+    // server.input_manager.wlr_relative_pointer_manager.sendRelativeMotion(
+    //     seat.wlr_seat,
+    //     @as(u64, time_msec) * 1000,
+    //     delta_x,
+    //     delta_y,
+    //     unaccel_dx,
+    //     unaccel_dy,
+    // );
 
     switch (self.mode) {
         .passthrough => {
-            self.wlr_cursor.move(device, delta_x, delta_y);
-            self.passthrough(time);
+            self.passthrough(time_msec);
         },
+        .move => |toplevel| self.move(toplevel),
+        .resize => |toplevel| self.resize(toplevel),
     }
 }
 
-fn passthrough(self: *hwc.input.Cursor, time: u32) void {
-    assert(self.mode == .passthrough);
-
+// TODO (hacky)
+fn passthrough(self: *hwc.input.Cursor, time_msec: u32) void {
     const seat = self.getSeat();
 
     if (server.surface_manager.resultAt(self.wlr_cursor.x, self.wlr_cursor.y)) |result| {
         if (result.wlr_surface) |wlr_surface| {
             seat.wlr_seat.pointerNotifyEnter(wlr_surface, result.sx, result.sy);
-            seat.wlr_seat.pointerNotifyMotion(time, result.sx, result.sy);
+            seat.wlr_seat.pointerNotifyMotion(time_msec, result.sx, result.sy);
         }
     } else {
-        seat.wlr_seat.pointerNotifyClearFocus();
         self.wlr_cursor.setXcursor(self.wlr_xcursor_manager, "default");
+        seat.wlr_seat.pointerClearFocus();
     }
+}
+
+// TODO (hacky)
+fn move(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
+    toplevel.x = @as(i32, @intFromFloat(self.wlr_cursor.x - self.grab_x));
+    toplevel.y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
+
+    toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
+}
+
+// TODO (hacky)
+fn resize(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
+    const border_x = @as(i32, @intFromFloat(self.wlr_cursor.x - self.grab_x));
+    const border_y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
+
+    var new_left = self.grab_box.x;
+    var new_right = self.grab_box.x + self.grab_box.width;
+    var new_top = self.grab_box.y;
+    var new_bottom = self.grab_box.y + self.grab_box.height;
+
+    if (self.resize_edges.top) {
+        new_top = border_y;
+        if (new_top >= new_bottom)
+            new_top = new_bottom - 1;
+    } else if (self.resize_edges.bottom) {
+        new_bottom = border_y;
+        if (new_bottom <= new_top)
+            new_bottom = new_top + 1;
+    }
+
+    if (self.resize_edges.left) {
+        new_left = border_x;
+        if (new_left >= new_right)
+            new_left = new_right - 1;
+    } else if (self.resize_edges.right) {
+        new_right = border_x;
+        if (new_right <= new_left)
+            new_right = new_left + 1;
+    }
+
+    var geo_box: wlr.Box = undefined;
+    toplevel.wlr_xdg_toplevel.base.getGeometry(&geo_box);
+    toplevel.x = new_left - geo_box.x;
+    toplevel.y = new_top - geo_box.y;
+    toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
+
+    const new_width = new_right - new_left;
+    const new_height = new_bottom - new_top;
+    _ = toplevel.wlr_xdg_toplevel.setSize(new_width, new_height);
 }
 
 fn handlePinchBegin(

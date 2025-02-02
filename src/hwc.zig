@@ -25,9 +25,9 @@ pub const desktop = struct {
         /// For logging purposes
         pub fn status(self: Focusable, buffer: []u8) ![]const u8 {
             return switch (self) {
-                .toplevel => |toplevel| fmt.bufPrint(buffer, " [app_id='{s}' title='{s}']", .{
-                    toplevel.wlr_xdg_toplevel.app_id orelse "unknown",
-                    toplevel.wlr_xdg_toplevel.title orelse "unknown",
+                .toplevel => |toplevel| fmt.bufPrint(buffer, " [app_id='{?s}' title='{?s}']", .{
+                    toplevel.wlr_xdg_toplevel.app_id,
+                    toplevel.wlr_xdg_toplevel.title,
                 }),
                 .layer_surface => |layer_surface| fmt.bufPrint(buffer, " [namespace='{s}']", .{
                     layer_surface.wlr_layer_surface.namespace,
@@ -36,6 +36,7 @@ pub const desktop = struct {
             };
         }
     };
+
     pub const LayerSurface = @import("desktop/LayerSurface.zig");
     pub const Output = @import("desktop/Output.zig");
     pub const OutputManager = @import("desktop/OutputManager.zig");
