@@ -1,6 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.@"input.Seat");
 const meta = std.meta;
+const assert = std.debug.assert;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
@@ -12,8 +13,11 @@ const server = &hwc.server;
 wlr_seat: *wlr.Seat,
 cursor: hwc.input.Cursor,
 focused: hwc.desktop.Focusable = .none,
+focused_output: ?*hwc.desktop.Output = null,
 
 destroy: wl.Listener(*wlr.Seat) = wl.Listener(*wlr.Seat).init(handleDestroy),
+focused_output_destroy: wl.Listener(*wlr.Output) =
+    wl.Listener(*wlr.Output).init(handleFocusedOutputDestroy),
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) =
     wl.Listener(*wlr.Seat.event.RequestSetCursor).init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) =
@@ -54,7 +58,7 @@ pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
         var focused_buffer: [1024]u8 = undefined;
         var target_buffer: [1024]u8 = undefined;
 
-        log.info("{s}: {s}{!s} -> {s}{!s}", .{
+        log.debug("{s}: {s}{!s} -> {s}{!s}", .{
             @src().fn_name,
             @tagName(self.focused),
             self.focused.status(&focused_buffer),
@@ -94,6 +98,32 @@ pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
     if (target.wlrSurface()) |wlr_surface| {
         self.keyboardNotifyEnter(wlr_surface);
     }
+}
+
+pub fn focusOutput(self: *hwc.input.Seat, output: *hwc.desktop.Output) void {
+    if (self.focused_output == output) {
+        return;
+    }
+
+    if (self.focused_output) |focused_output| {
+        if (focused_output.wlr_output == output.wlr_output) {
+            return;
+        }
+
+        self.focused_output_destroy.link.remove();
+
+        assert(focused_output.wlr_output != output.wlr_output);
+    }
+
+    log.debug("{s}: '{?s}' -> '{s}'", .{
+        @src().fn_name,
+        if (self.focused_output) |focused_output| focused_output.wlr_output.name else null,
+        output.wlr_output.name,
+    });
+
+    output.wlr_output.events.destroy.add(&self.focused_output_destroy);
+
+    self.focused_output = output;
 }
 
 pub fn keyboardNotifyEnter(self: *hwc.input.Seat, wlr_surface: *wlr.Surface) void {
@@ -144,6 +174,11 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Seat), wlr_seat: *wlr.Seat) void {
     seat.start_drag.link.remove();
 
     log.info("{s}: name='{s}'", .{ @src().fn_name, wlr_seat.name });
+}
+
+fn handleFocusedOutputDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("focused_output_destroy", listener);
+    seat.focused_output = null;
 }
 
 fn handleRequestSetCursor(

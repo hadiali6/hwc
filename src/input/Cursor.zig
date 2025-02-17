@@ -9,6 +9,19 @@ const wlr = @import("wlroots");
 const hwc = @import("hwc");
 const server = &hwc.server;
 
+const ImageName = enum {
+    default,
+    move,
+    @"n-resize",
+    @"nw-resize",
+    @"ne-resize",
+    @"s-resize",
+    @"sw-resize",
+    @"se-resize",
+    @"w-resize",
+    @"e-resize",
+};
+
 wlr_cursor: *wlr.Cursor,
 wlr_xcursor_manager: *wlr.XcursorManager,
 
@@ -23,33 +36,35 @@ grab_y: f64 = 0,
 grab_box: wlr.Box = undefined,
 resize_edges: wlr.Edges = .{},
 
-axis: wl.Listener(*wlr.Pointer.event.Axis) = wl.Listener(*wlr.Pointer.event.Axis).init(handleAxis),
-button: wl.Listener(*wlr.Pointer.event.Button) =
-    wl.Listener(*wlr.Pointer.event.Button).init(handleButton),
 frame: wl.Listener(*wlr.Cursor) = wl.Listener(*wlr.Cursor).init(handleFrame),
+
+axis: wl.Listener(*wlr.Pointer.event.Axis) =
+    wl.Listener(*wlr.Pointer.event.Axis).init(handlePointerAxis),
+button: wl.Listener(*wlr.Pointer.event.Button) =
+    wl.Listener(*wlr.Pointer.event.Button).init(handlePointerButton),
 motion: wl.Listener(*wlr.Pointer.event.Motion) =
-    wl.Listener(*wlr.Pointer.event.Motion).init(handleMotion),
+    wl.Listener(*wlr.Pointer.event.Motion).init(handlePointerMotion),
 motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) =
-    wl.Listener(*wlr.Pointer.event.MotionAbsolute).init(handleMotionAbsolute),
+    wl.Listener(*wlr.Pointer.event.MotionAbsolute).init(handlePointerMotionAbsolute),
 
 pinch_begin: wl.Listener(*wlr.Pointer.event.PinchBegin) =
-    wl.Listener(*wlr.Pointer.event.PinchBegin).init(handlePinchBegin),
+    wl.Listener(*wlr.Pointer.event.PinchBegin).init(handlePointerPinchBegin),
 pinch_update: wl.Listener(*wlr.Pointer.event.PinchUpdate) =
-    wl.Listener(*wlr.Pointer.event.PinchUpdate).init(handlePinchUpdate),
+    wl.Listener(*wlr.Pointer.event.PinchUpdate).init(handlePointerPinchUpdate),
 pinch_end: wl.Listener(*wlr.Pointer.event.PinchEnd) =
-    wl.Listener(*wlr.Pointer.event.PinchEnd).init(handlePinchEnd),
+    wl.Listener(*wlr.Pointer.event.PinchEnd).init(handlePointerPinchEnd),
 
 swipe_begin: wl.Listener(*wlr.Pointer.event.SwipeBegin) =
-    wl.Listener(*wlr.Pointer.event.SwipeBegin).init(handleSwipeBegin),
+    wl.Listener(*wlr.Pointer.event.SwipeBegin).init(handlePointerSwipeBegin),
 swipe_update: wl.Listener(*wlr.Pointer.event.SwipeUpdate) =
-    wl.Listener(*wlr.Pointer.event.SwipeUpdate).init(handleSwipeUpdate),
+    wl.Listener(*wlr.Pointer.event.SwipeUpdate).init(handlePointerSwipeUpdate),
 swipe_end: wl.Listener(*wlr.Pointer.event.SwipeEnd) =
-    wl.Listener(*wlr.Pointer.event.SwipeEnd).init(handleSwipeEnd),
+    wl.Listener(*wlr.Pointer.event.SwipeEnd).init(handlePointerSwipeEnd),
 
 hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) =
-    wl.Listener(*wlr.Pointer.event.HoldBegin).init(handleHoldBegin),
+    wl.Listener(*wlr.Pointer.event.HoldBegin).init(handlePointerHoldBegin),
 hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) =
-    wl.Listener(*wlr.Pointer.event.HoldEnd).init(handleHoldEnd),
+    wl.Listener(*wlr.Pointer.event.HoldEnd).init(handlePointerHoldEnd),
 
 touch_up: wl.Listener(*wlr.Touch.event.Up) = wl.Listener(*wlr.Touch.event.Up).init(handleTouchUp),
 touch_down: wl.Listener(*wlr.Touch.event.Down) =
@@ -137,7 +152,13 @@ fn getSeat(self: *hwc.input.Cursor) *hwc.input.Seat {
     return @fieldParentPtr("cursor", self);
 }
 
-fn handleAxis(
+fn handleFrame(listener: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("frame", listener);
+    const seat = cursor.getSeat();
+    seat.wlr_seat.pointerNotifyFrame();
+}
+
+fn handlePointerAxis(
     listener: *wl.Listener(*wlr.Pointer.event.Axis),
     event: *wlr.Pointer.event.Axis,
 ) void {
@@ -164,37 +185,53 @@ fn handleAxis(
     });
 }
 
-fn handleButton(
+fn handlePointerButton(
     listener: *wl.Listener(*wlr.Pointer.event.Button),
     event: *wlr.Pointer.event.Button,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("button", listener);
     const seat = cursor.getSeat();
 
+    // TODO pointer button binding
+
     _ = seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
-    if (event.state == .released) {
-        cursor.mode = .passthrough;
-    } else if (server.surface_manager.resultAt(cursor.wlr_cursor.x, cursor.wlr_cursor.y)) |result| {
-        if (hwc.desktop.SceneDescriptor.fromNode(result.wlr_scene_node)) |scene_descriptor| {
-            seat.focus(scene_descriptor.focusable);
-        }
+    switch (event.state) {
+        .released => {
+            cursor.mode = .passthrough;
+        },
+
+        .pressed => if (server.surface_manager.resultAt(
+            cursor.wlr_cursor.x,
+            cursor.wlr_cursor.y,
+        )) |result| {
+            if (hwc.desktop.SceneDescriptor.fromNode(result.wlr_scene_node)) |scene_descriptor| {
+                seat.focus(scene_descriptor.focusable);
+            }
+        } else {
+            seat.focus(.none);
+        },
+
+        else => unreachable,
     }
 }
 
-fn handleFrame(listener: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
-    const cursor: *hwc.input.Cursor = @fieldParentPtr("frame", listener);
-    const seat = cursor.getSeat();
-    seat.wlr_seat.pointerNotifyFrame();
-}
-
-// TODO (hacky)
-fn handleMotion(
+// TODO (bad)
+fn handlePointerMotion(
     listener: *wl.Listener(*wlr.Pointer.event.Motion),
     event: *wlr.Pointer.event.Motion,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("motion", listener);
 
-    cursor.wlr_cursor.move(event.device, event.delta_x, event.delta_y);
+    if (server.output_manager.wlr_output_layout.outputAt(
+        cursor.wlr_cursor.x,
+        cursor.wlr_cursor.y,
+    )) |wlr_output| {
+        if (@as(?*hwc.desktop.Output, @ptrFromInt(wlr_output.data))) |output| {
+            const seat = cursor.getSeat();
+            seat.focusOutput(output);
+        }
+    }
+
     cursor.processMotion(
         event.device,
         event.time_msec,
@@ -205,25 +242,24 @@ fn handleMotion(
     );
 }
 
-// TODO (hacky)
-fn handleMotionAbsolute(
+// TODO (bad)
+fn handlePointerMotionAbsolute(
     listener: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
     event: *wlr.Pointer.event.MotionAbsolute,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("motion_absolute", listener);
 
-    // var lx: f64 = undefined;
-    // var ly: f64 = undefined;
-    // cursor.wlr_cursor.absoluteToLayoutCoords(event.device, event.x, event.y, &lx, &ly);
-    //
-    // const dx = lx - cursor.wlr_cursor.x;
-    // const dy = ly - cursor.wlr_cursor.y;
+    var lx: f64 = undefined;
+    var ly: f64 = undefined;
+    cursor.wlr_cursor.absoluteToLayoutCoords(event.device, event.x, event.y, &lx, &ly);
 
-    cursor.wlr_cursor.warpAbsolute(event.device, event.x, event.y);
-    cursor.processMotion(event.device, event.time_msec, event.x, event.y, event.x, event.y);
+    const dx = lx - cursor.wlr_cursor.x;
+    const dy = ly - cursor.wlr_cursor.y;
+
+    cursor.processMotion(event.device, event.time_msec, dx, dy, dx, dy);
 }
 
-// TODO (hacky)
+// TODO (bad)
 fn processMotion(
     self: *hwc.input.Cursor,
     wlr_input_device: *wlr.InputDevice,
@@ -233,23 +269,18 @@ fn processMotion(
     unaccel_dx: f64,
     unaccel_dy: f64,
 ) void {
-    _ = wlr_input_device;
-    _ = delta_x;
-    _ = delta_y;
-    _ = unaccel_dx;
-    _ = unaccel_dy;
+    const seat = self.getSeat();
 
-    // const seat = self.getSeat();
+    server.input_manager.wlr_relative_pointer_manager.sendRelativeMotion(
+        seat.wlr_seat,
+        @as(u64, time_msec) * 1000,
+        delta_x,
+        delta_y,
+        unaccel_dx,
+        unaccel_dy,
+    );
 
-    // server.input_manager.wlr_relative_pointer_manager.sendRelativeMotion(
-    //     seat.wlr_seat,
-    //     @as(u64, time_msec) * 1000,
-    //     delta_x,
-    //     delta_y,
-    //     unaccel_dx,
-    //     unaccel_dy,
-    // );
-
+    self.wlr_cursor.move(wlr_input_device, delta_x, delta_y);
     switch (self.mode) {
         .passthrough => {
             self.passthrough(time_msec);
@@ -259,7 +290,7 @@ fn processMotion(
     }
 }
 
-// TODO (hacky)
+// TODO (bad)
 fn passthrough(self: *hwc.input.Cursor, time_msec: u32) void {
     const seat = self.getSeat();
 
@@ -267,22 +298,25 @@ fn passthrough(self: *hwc.input.Cursor, time_msec: u32) void {
         if (result.wlr_surface) |wlr_surface| {
             seat.wlr_seat.pointerNotifyEnter(wlr_surface, result.sx, result.sy);
             seat.wlr_seat.pointerNotifyMotion(time_msec, result.sx, result.sy);
-        }
-    } else {
-        self.wlr_cursor.setXcursor(self.wlr_xcursor_manager, "default");
-        seat.wlr_seat.pointerClearFocus();
+        } else unreachable;
+
+        return;
     }
+
+    self.wlr_cursor.setXcursor(self.wlr_xcursor_manager, "default");
+    seat.wlr_seat.pointerClearFocus();
 }
 
-// TODO (hacky)
+// TODO (bad)
 fn move(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
     toplevel.x = @as(i32, @intFromFloat(self.wlr_cursor.x - self.grab_x));
     toplevel.y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
 
     toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
+    // toplevel.output_tracker.node.setPosition(toplevel.x, toplevel.y);
 }
 
-// TODO (hacky)
+// TODO (bad)
 fn resize(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
     const border_x = @as(i32, @intFromFloat(self.wlr_cursor.x - self.grab_x));
     const border_y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
@@ -294,22 +328,26 @@ fn resize(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
 
     if (self.resize_edges.top) {
         new_top = border_y;
-        if (new_top >= new_bottom)
+        if (new_top >= new_bottom) {
             new_top = new_bottom - 1;
+        }
     } else if (self.resize_edges.bottom) {
         new_bottom = border_y;
-        if (new_bottom <= new_top)
+        if (new_bottom <= new_top) {
             new_bottom = new_top + 1;
+        }
     }
 
     if (self.resize_edges.left) {
         new_left = border_x;
-        if (new_left >= new_right)
+        if (new_left >= new_right) {
             new_left = new_right - 1;
+        }
     } else if (self.resize_edges.right) {
         new_right = border_x;
-        if (new_right <= new_left)
+        if (new_right <= new_left) {
             new_right = new_left + 1;
+        }
     }
 
     var geo_box: wlr.Box = undefined;
@@ -317,13 +355,15 @@ fn resize(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
     toplevel.x = new_left - geo_box.x;
     toplevel.y = new_top - geo_box.y;
     toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
+    // toplevel.output_tracker.node.setPosition(toplevel.x, toplevel.y);
 
     const new_width = new_right - new_left;
     const new_height = new_bottom - new_top;
     _ = toplevel.wlr_xdg_toplevel.setSize(new_width, new_height);
+    // toplevel.output_tracker.setDestSize(new_width, new_height);
 }
 
-fn handlePinchBegin(
+fn handlePointerPinchBegin(
     listener: *wl.Listener(*wlr.Pointer.event.PinchBegin),
     event: *wlr.Pointer.event.PinchBegin,
 ) void {
@@ -334,7 +374,7 @@ fn handlePinchBegin(
     wlr_pointer_gestures.sendPinchBegin(seat.wlr_seat, event.time_msec, event.fingers);
 }
 
-fn handlePinchUpdate(
+fn handlePointerPinchUpdate(
     listener: *wl.Listener(*wlr.Pointer.event.PinchUpdate),
     event: *wlr.Pointer.event.PinchUpdate,
 ) void {
@@ -352,7 +392,7 @@ fn handlePinchUpdate(
     );
 }
 
-fn handlePinchEnd(
+fn handlePointerPinchEnd(
     listener: *wl.Listener(*wlr.Pointer.event.PinchEnd),
     event: *wlr.Pointer.event.PinchEnd,
 ) void {
@@ -367,7 +407,7 @@ fn handlePinchEnd(
     );
 }
 
-fn handleSwipeBegin(
+fn handlePointerSwipeBegin(
     listener: *wl.Listener(*wlr.Pointer.event.SwipeBegin),
     event: *wlr.Pointer.event.SwipeBegin,
 ) void {
@@ -382,7 +422,7 @@ fn handleSwipeBegin(
     );
 }
 
-fn handleSwipeUpdate(
+fn handlePointerSwipeUpdate(
     listener: *wl.Listener(*wlr.Pointer.event.SwipeUpdate),
     event: *wlr.Pointer.event.SwipeUpdate,
 ) void {
@@ -398,7 +438,7 @@ fn handleSwipeUpdate(
     );
 }
 
-fn handleSwipeEnd(
+fn handlePointerSwipeEnd(
     listener: *wl.Listener(*wlr.Pointer.event.SwipeEnd),
     event: *wlr.Pointer.event.SwipeEnd,
 ) void {
@@ -413,7 +453,7 @@ fn handleSwipeEnd(
     );
 }
 
-fn handleHoldBegin(
+fn handlePointerHoldBegin(
     listener: *wl.Listener(*wlr.Pointer.event.HoldBegin),
     event: *wlr.Pointer.event.HoldBegin,
 ) void {
@@ -428,7 +468,7 @@ fn handleHoldBegin(
     );
 }
 
-fn handleHoldEnd(
+fn handlePointerHoldEnd(
     listener: *wl.Listener(*wlr.Pointer.event.HoldEnd),
     event: *wlr.Pointer.event.HoldEnd,
 ) void {

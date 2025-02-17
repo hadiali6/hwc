@@ -38,7 +38,7 @@ pub fn create(
     wlr_xdg_popup.base.surface.events.commit.add(&popup.commit);
     wlr_xdg_popup.base.events.new_popup.add(&popup.new_popup);
 
-    log.info("{s}: parent={any}", .{ @src().fn_name, wlr_xdg_popup.parent orelse null });
+    log.info("{s}: parent={?*}", .{ @src().fn_name, wlr_xdg_popup.parent });
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {

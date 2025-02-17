@@ -88,7 +88,11 @@ fn handleLayoutChange(
         output.wlr_scene_output.setPosition(box.x, box.y);
     }
 
-    log.debug("{s}", .{@src().fn_name});
+    {
+        var box: wlr.Box = undefined;
+        wlr_output_layout.getBox(null, &box);
+        log.debug("{s}: {}x{}", .{ @src().fn_name, box.width, box.height });
+    }
 }
 
 // TODO

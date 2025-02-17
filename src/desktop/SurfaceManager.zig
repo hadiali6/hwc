@@ -106,6 +106,18 @@ fn handleNewLayerSurface(
     _: *wl.Listener(*wlr.LayerSurfaceV1),
     wlr_layer_surface: *wlr.LayerSurfaceV1,
 ) void {
+    if (wlr_layer_surface.output == null) {
+        const seat = server.input_manager.default_seat;
+
+        if (server.output_manager.outputs.empty() or seat.focused_output == null) {
+            log.err("{s} failed: no output to render layer surface", .{@src().fn_name});
+            return;
+        }
+
+        const output = seat.focused_output orelse unreachable;
+        wlr_layer_surface.output = output.wlr_output;
+    }
+
     hwc.desktop.LayerSurface.create(server.allocator, wlr_layer_surface) catch |err| {
         log.err("{s} failed: '{}'", .{ @src().fn_name, err });
 

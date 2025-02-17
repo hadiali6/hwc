@@ -127,6 +127,10 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.O
     wlr_output.events.frame.add(&output.frame);
     wlr_output.events.request_state.add(&output.request_state);
 
+    if (server.input_manager.default_seat.focused_output == null) {
+        server.input_manager.default_seat.focusOutput(output);
+    }
+
     log.info("{s}: name='{s}'", .{ @src().fn_name, wlr_output.name });
 
     return output;

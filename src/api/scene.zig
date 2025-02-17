@@ -1,9 +1,10 @@
 const std = @import("std");
 
 const wlr = @import("wlroots");
+const hwc = @import("hwc");
 
-pub fn dump(node: *wlr.SceneNode) void {
-    dumpNode(node, null, node.x, node.y);
+fn out_print(comptime fmt: []const u8, args: anytype) void {
+    std.debug.print(fmt, args);
 }
 
 const PrefixStack = struct {
@@ -16,9 +17,9 @@ const PrefixStack = struct {
         }
 
         if (self.more_children) {
-            std.debug.print("{s}", .{if (top) "  ├─" else "  │ "});
+            out_print("{s}", .{if (top) "  ├─" else "  │ "});
         } else {
-            std.debug.print("{s}", .{if (top) "  └─" else "    "});
+            out_print("{s}", .{if (top) "  └─" else "    "});
         }
     }
 };
@@ -29,24 +30,31 @@ fn dumpNode(node: *wlr.SceneNode, parent: ?*PrefixStack, x: c_int, y: c_int) voi
     }
 
     switch (node.type) {
-        .tree => std.debug.print(
-            "[tree] {},{} ({x})\n",
+        .tree => out_print(
+            "[tree] {},{} ({x})",
             .{ x, y, @intFromPtr(node) },
         ),
         .rect => {
             const wlr_scene_rect = wlr.SceneRect.fromNode(node);
-            std.debug.print(
-                "[rect] {},{} {}x{} ({x})\n",
+            out_print(
+                "[rect] {},{} {}x{} ({x})",
                 .{ x, y, wlr_scene_rect.width, wlr_scene_rect.height, @intFromPtr(node) },
             );
         },
         .buffer => {
             const wlr_scene_buffer = wlr.SceneBuffer.fromNode(node);
-            std.debug.print(
-                "[buffer] {},{} {}x{} ({x})\n",
+            out_print(
+                "[buffer] {},{} {}x{} ({x})",
                 .{ x, y, wlr_scene_buffer.dst_width, wlr_scene_buffer.dst_height, @intFromPtr(node) },
             );
         },
+    }
+
+    if (hwc.desktop.SceneDescriptor.fromNode(node)) |scene_descriptor| {
+        var buffer: [2048:0]u8 = undefined;
+        out_print(" {s}{!s}\n", .{ @tagName(scene_descriptor.focusable), scene_descriptor.focusable.status(&buffer) });
+    } else {
+        out_print("\n", .{});
     }
 
     if (node.type != .tree) {
@@ -54,10 +62,12 @@ fn dumpNode(node: *wlr.SceneNode, parent: ?*PrefixStack, x: c_int, y: c_int) voi
     }
 
     const tree: *wlr.SceneTree = @alignCast(@ptrCast(node));
+
     var stack = PrefixStack{
         .parent = parent,
         .more_children = undefined,
     };
+
     var it = tree.children.iterator(.forward);
     while (it.next()) |child| {
         if (@intFromPtr(child.link.next.?) == @intFromPtr(&tree.children)) {
@@ -68,4 +78,8 @@ fn dumpNode(node: *wlr.SceneNode, parent: ?*PrefixStack, x: c_int, y: c_int) voi
 
         dumpNode(child, &stack, x + child.x, y + child.y);
     }
+}
+
+pub fn dump(node: *wlr.SceneNode) void {
+    dumpNode(node, null, node.x, node.y);
 }

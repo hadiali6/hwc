@@ -176,25 +176,28 @@ fn handleGlobalFilter(
         const allowed = server.isAllowed(wl_global);
         const blocked = server.isBlocked(wl_global);
 
-        log.debug("{s}: global='{s}' allowed='{}' sandbox_engine='{s}' app_id='{s}' instance_id='{s}'", .{
-            @src().fn_name,
-            wl_global.getInterface().name,
-            allowed,
-            wlr_security_context_state.app_id orelse "unknown",
-            wlr_security_context_state.app_id orelse "unknown",
-            wlr_security_context_state.instance_id orelse "unknown",
-        });
+        log.debug(
+            "{s}: global='{s}' allowed='{}' sandbox_engine='{?s}' app_id='{?s}' instance_id='{?s}'",
+            .{
+                @src().fn_name,
+                wl_global.getInterface().name,
+                allowed,
+                wlr_security_context_state.app_id,
+                wlr_security_context_state.app_id,
+                wlr_security_context_state.instance_id,
+            },
+        );
 
         assert(blocked != allowed);
 
         return allowed;
-    } else {
-        log.debug(
-            "{s}: global='{s}' allowed='true'",
-            .{ @src().fn_name, wl_global.getInterface().name },
-        );
-        return true;
     }
+
+    log.debug(
+        "{s}: global='{s}' allowed='true'",
+        .{ @src().fn_name, wl_global.getInterface().name },
+    );
+    return true;
 }
 
 fn isAllowed(self: *hwc.Server, wl_global: *const wl.Global) bool {
