@@ -70,6 +70,8 @@ pub fn create(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) !*hw
         .internal_device = undefined,
     };
 
+    wlr_input_device.data = @intFromPtr(device);
+
     try device.internal_device.init(wlr_input_device);
 
     wlr_input_device.events.destroy.add(&device.destroy);
@@ -77,6 +79,10 @@ pub fn create(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) !*hw
     log.info("{s}: identifier='{s}'", .{ @src().fn_name, device.identifier });
 
     return device;
+}
+
+pub fn fromWlrInputDevice(wlr_input_device: *wlr.InputDevice) *hwc.input.Device {
+    return @as(?*hwc.input.Device, @ptrFromInt(wlr_input_device.data)) orelse unreachable;
 }
 
 fn createIdentifier(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) ![]const u8 {

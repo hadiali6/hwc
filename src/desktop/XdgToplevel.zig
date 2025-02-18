@@ -192,7 +192,6 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     toplevel.buffer_outputs_update.link.remove();
     toplevel.buffer_output_enter.link.remove();
     toplevel.buffer_output_leave.link.remove();
-    toplevel.buffer_output_sample.link.remove();
 
     log.info(
         "{s}: app_id='{?s}' title='{?s}'",
@@ -272,6 +271,7 @@ fn handleRequestMove(
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_move", listener);
     var cursor = &server.input_manager.default_seat.cursor;
+    cursor.wlr_cursor.setXcursor(cursor.wlr_xcursor_manager, "move");
 
     cursor.mode = .{ .move = toplevel };
     cursor.grab_x = cursor.wlr_cursor.x - @as(f64, @floatFromInt(toplevel.x));
@@ -320,15 +320,28 @@ fn handleBufferOutputsUpdate(
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_outputs_update", listener);
 
-    var buf: [2048:0]u8 = undefined;
-    const output_names: ?[]u8 = if (event.size == 0) null else blk: {
-        for (0..event.size) |i| {
-            _ = std.fmt.bufPrint(&buf, "{s} ", .{event.active[i].output.name}) catch unreachable;
+    var array_list = std.ArrayListUnmanaged(u8){};
+
+    const output_names: ?[]u8 = blk: {
+        if (event.size == 0) {
+            break :blk null;
         }
-        break :blk &buf;
+
+        var buffer: [256]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        const writer = array_list.writer(fba.allocator());
+
+        _ = writer.write(mem.span(event.active[0].output.name)) catch unreachable;
+
+        for (1..event.size) |i| {
+            _ = writer.write(", ") catch unreachable;
+            _ = writer.write(mem.span(event.active[i].output.name)) catch unreachable;
+        }
+
+        break :blk array_list.items;
     };
 
-    log.info("{s}: '{?s}' app_id='{?s}' title='{?s}'", .{
+    log.info("{s}: outputs=[{?s}] app_id='{?s}' title='{?s}'", .{
         @src().fn_name,
         output_names,
         toplevel.wlr_xdg_toplevel.app_id,
@@ -342,7 +355,7 @@ fn handleBufferOutputEnter(
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_output_enter", listener);
 
-    log.info("{s}: '{s}' app_id='{?s}' title='{?s}'", .{
+    log.info("{s}: output='{s}' app_id='{?s}' title='{?s}'", .{
         @src().fn_name,
         wlr_scene_output.output.name,
         toplevel.wlr_xdg_toplevel.app_id,
@@ -356,7 +369,7 @@ fn handleBufferOutputLeave(
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_output_leave", listener);
 
-    log.info("{s}: '{s}' app_id='{?s}' title='{?s}'", .{
+    log.info("{s}: output='{s}' app_id='{?s}' title='{?s}'", .{
         @src().fn_name,
         wlr_scene_output.output.name,
         toplevel.wlr_xdg_toplevel.app_id,

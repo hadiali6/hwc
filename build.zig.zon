@@ -5,12 +5,12 @@
 
     .dependencies = .{
         .@"zig-wayland" = .{
-            .url = "https://codeberg.org/ifreund/zig-wayland/archive/a507358764d209627e6a555104099b0825d8934c.tar.gz",
-            .hash = "12204339bf0ea439f92ad54e220be6d42f15431f3d1cd107fb272d0b19a43d98ab17",
+            .url = "https://codeberg.org/ifreund/zig-wayland/archive/8fe2242147d558836f05b5e5a7f22420a570331c.tar.gz",
+            .hash = "1220e4ca22ab59015ae3500b60e6ef0504af568c5d1b4b6255bcbc1ba77a896c601d",
         },
         .@"zig-wlroots" = .{
-            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/7fd9f01746e25c5f623384ebc2e45632e4a60965.tar.gz",
-            .hash = "122012d30acca9039fecdf28a0fe410dee5ebc42380b75902f60dbb19c15b8052516",
+            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/84f8c8b84c0361dfc8663c06c0c62a34d716720d.tar.gz",
+            .hash = "1220e00cd68579fcbcc7c80a291a024083df43733ecab3c83d91f549ada6e237c09a",
         },
         .@"zig-pixman" = .{
             .url = "https://codeberg.org/ifreund/zig-pixman/archive/99a74e10d12cdc5db6a0fb206bab9a0a63a5824b.tar.gz",

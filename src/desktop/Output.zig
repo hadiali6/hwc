@@ -136,6 +136,10 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.O
     return output;
 }
 
+pub fn fromWlrOutput(wlr_output: *wlr.Output) *hwc.desktop.Output {
+    return @as(?*hwc.desktop.Output, @ptrFromInt(wlr_output.data)) orelse unreachable;
+}
+
 pub fn layerSurfaceTree(self: hwc.desktop.Output, layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
     return switch (layer) {
         .background => self.layers.background,

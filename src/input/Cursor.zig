@@ -176,13 +176,17 @@ fn handlePointerAxis(
         event.relative_direction,
     );
 
-    log.debug("{s}: '{s}' orientation='{s}' source='{s}' relative_direction='{s}'", .{
-        @src().fn_name,
-        if (event.delta_discrete > 0) "scroll down" else "scroll up",
-        @tagName(event.orientation),
-        @tagName(event.source),
-        @tagName(event.relative_direction),
-    });
+    log.debug(
+        "{s}: device='{s}' scroll='{s}' orientation='{s}' source='{s}' relative_direction='{s}'",
+        .{
+            @src().fn_name,
+            hwc.input.Device.fromWlrInputDevice(event.device).identifier,
+            if (event.delta_discrete > 0) "down" else "up",
+            @tagName(event.orientation),
+            @tagName(event.source),
+            @tagName(event.relative_direction),
+        },
+    );
 }
 
 fn handlePointerButton(
@@ -207,12 +211,17 @@ fn handlePointerButton(
             if (hwc.desktop.SceneDescriptor.fromNode(result.wlr_scene_node)) |scene_descriptor| {
                 seat.focus(scene_descriptor.focusable);
             }
-        } else {
-            seat.focus(.none);
         },
 
         else => unreachable,
     }
+
+    log.debug("{s}: device='{s}' button='{?s}' state='{s}'", .{
+        @src().fn_name,
+        hwc.input.Device.fromWlrInputDevice(event.device).identifier,
+        hwc.input.util.linuxInputEventCodeToString(.pointer, event.button),
+        @tagName(event.state),
+    });
 }
 
 // TODO (bad)
@@ -226,10 +235,9 @@ fn handlePointerMotion(
         cursor.wlr_cursor.x,
         cursor.wlr_cursor.y,
     )) |wlr_output| {
-        if (@as(?*hwc.desktop.Output, @ptrFromInt(wlr_output.data))) |output| {
-            const seat = cursor.getSeat();
-            seat.focusOutput(output);
-        }
+        const output = hwc.desktop.Output.fromWlrOutput(wlr_output);
+        const seat = cursor.getSeat();
+        seat.focusOutput(output);
     }
 
     cursor.processMotion(
@@ -313,7 +321,6 @@ fn move(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
     toplevel.y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
 
     toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
-    // toplevel.output_tracker.node.setPosition(toplevel.x, toplevel.y);
 }
 
 // TODO (bad)
@@ -355,12 +362,10 @@ fn resize(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
     toplevel.x = new_left - geo_box.x;
     toplevel.y = new_top - geo_box.y;
     toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
-    // toplevel.output_tracker.node.setPosition(toplevel.x, toplevel.y);
 
     const new_width = new_right - new_left;
     const new_height = new_bottom - new_top;
     _ = toplevel.wlr_xdg_toplevel.setSize(new_width, new_height);
-    // toplevel.output_tracker.setDestSize(new_width, new_height);
 }
 
 fn handlePointerPinchBegin(
