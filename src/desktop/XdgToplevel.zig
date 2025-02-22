@@ -14,6 +14,8 @@ link: wl.list.Link,
 wlr_xdg_toplevel: *wlr.XdgToplevel,
 surface_tree: *wlr.SceneTree,
 popup_tree: *wlr.SceneTree,
+
+primary_output: *hwc.desktop.Output,
 output_tracker: *wlr.SceneBuffer,
 
 x: i32 = 0,
@@ -25,6 +27,12 @@ map: wl.Listener(void) = wl.Listener(void).init(handleMap),
 unmap: wl.Listener(void) = wl.Listener(void).init(handleUnmap),
 commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(handleCommit),
 new_popup: wl.Listener(*wlr.XdgPopup) = wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
+buffer_outputs_update: wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate) =
+    wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate).init(handleBufferOutputsUpdate),
+buffer_output_enter: wl.Listener(*wlr.SceneOutput) =
+    wl.Listener(*wlr.SceneOutput).init(handleBufferOutputEnter),
+buffer_output_leave: wl.Listener(*wlr.SceneOutput) =
+    wl.Listener(*wlr.SceneOutput).init(handleBufferOutputLeave),
 
 // listeners that are only active while the toplevel is mapped
 ack_configure: wl.Listener(*wlr.XdgSurface.Configure) =
@@ -39,13 +47,6 @@ request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
 set_title: wl.Listener(void) = wl.Listener(void).init(handleSetTitle),
 set_app_id: wl.Listener(void) = wl.Listener(void).init(handleSetAppId),
 
-buffer_outputs_update: wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate) =
-    wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate).init(handleBufferOutputsUpdate),
-buffer_output_enter: wl.Listener(*wlr.SceneOutput) =
-    wl.Listener(*wlr.SceneOutput).init(handleBufferOutputEnter),
-buffer_output_leave: wl.Listener(*wlr.SceneOutput) =
-    wl.Listener(*wlr.SceneOutput).init(handleBufferOutputLeave),
-
 pub fn create(
     allocator: mem.Allocator,
     wlr_xdg_toplevel: *wlr.XdgToplevel,
@@ -56,8 +57,10 @@ pub fn create(
     const surface_tree = try server.surface_manager.wlr_scene.tree.createSceneTree();
     errdefer surface_tree.node.destroy();
 
-    // TODO: use current outputs popup layer
-    const popup_tree = try server.surface_manager.wlr_scene.tree.createSceneTree();
+    assert(!server.output_manager.outputs.empty());
+    const current_output = server.input_manager.default_seat.focused_output.?;
+
+    const popup_tree = try current_output.layers.popups.createSceneTree();
     errdefer popup_tree.node.destroy();
 
     toplevel.* = .{
@@ -66,25 +69,22 @@ pub fn create(
         .surface_tree = surface_tree,
         .popup_tree = popup_tree,
         .output_tracker = undefined,
+        .primary_output = current_output,
     };
 
     try hwc.desktop.SceneDescriptor.create(allocator, &surface_tree.node, .{ .toplevel = toplevel });
     try hwc.desktop.SceneDescriptor.create(allocator, &popup_tree.node, .{ .toplevel = toplevel });
 
+    wlr_xdg_toplevel.base.surface.data = @intFromPtr(toplevel.surface_tree);
+
     wlr_xdg_toplevel.base.surface.events.unmap.add(&toplevel.unmap);
     errdefer toplevel.unmap.link.remove();
 
-    const xdg_surface_scene_tree = try toplevel.surface_tree.createSceneXdgSurface(wlr_xdg_toplevel.base);
+    const xdg_surface_scene_tree =
+        try toplevel.surface_tree.createSceneXdgSurface(wlr_xdg_toplevel.base);
 
-    if (findBuffer(xdg_surface_scene_tree)) |output_tracker| {
-        toplevel.output_tracker = output_tracker;
-    } else unreachable;
-
-    toplevel.output_tracker.point_accepts_input = struct {
-        fn cb(_: *wlr.SceneBuffer, _: *f64, _: *f64) callconv(.C) bool {
-            return false;
-        }
-    }.cb;
+    // xdg_surface_scene_tree should always have an underlying wlr_scene_buffer
+    toplevel.output_tracker = findBuffer(xdg_surface_scene_tree).?;
 
     // add listeners that are active over the toplevel's entire lifetime
     wlr_xdg_toplevel.events.destroy.add(&toplevel.destroy);
@@ -109,10 +109,7 @@ fn findBuffer(wlr_scene_tree: *wlr.SceneTree) ?*wlr.SceneBuffer {
     while (it.next()) |wlr_scene_node| {
         switch (wlr_scene_node.type) {
             .tree => return findBuffer(wlr.SceneTree.fromNode(wlr_scene_node)),
-            .buffer => {
-                log.debug("found buffer", .{});
-                return wlr.SceneBuffer.fromNode(wlr_scene_node);
-            },
+            .buffer => return wlr.SceneBuffer.fromNode(wlr_scene_node),
             .rect => {},
         }
     }
@@ -134,6 +131,10 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 
     toplevel.link.remove();
 
+    toplevel.buffer_outputs_update.link.remove();
+    toplevel.buffer_output_enter.link.remove();
+    toplevel.buffer_output_leave.link.remove();
+
     toplevel.surface_tree.node.destroy();
     toplevel.popup_tree.node.destroy();
 
@@ -148,7 +149,7 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
         .{ @src().fn_name, toplevel.wlr_xdg_toplevel.app_id, toplevel.wlr_xdg_toplevel.title },
     );
 
-    server.allocator.destroy(toplevel);
+    server.mem_allocator.destroy(toplevel);
 }
 
 // TODO
@@ -189,10 +190,6 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     toplevel.set_title.link.remove();
     toplevel.set_app_id.link.remove();
 
-    toplevel.buffer_outputs_update.link.remove();
-    toplevel.buffer_output_enter.link.remove();
-    toplevel.buffer_output_leave.link.remove();
-
     log.info(
         "{s}: app_id='{?s}' title='{?s}'",
         .{ @src().fn_name, toplevel.wlr_xdg_toplevel.app_id, toplevel.wlr_xdg_toplevel.title },
@@ -210,12 +207,15 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         _ = toplevel.wlr_xdg_toplevel.base.scheduleConfigure();
     }
 
-    log.debug("commit {}x{} {}x{} {?s}", .{
-        box.width, box.height, box.x, box.y,
-        if (toplevel.output_tracker.primary_output) |primary_wlr_output|
-            primary_wlr_output.output.name
-        else
-            null,
+    if (toplevel.output_tracker.primary_output) |primary_wlr_scene_output| {
+        toplevel.primary_output = hwc.desktop.Output.fromWlrOutput(primary_wlr_scene_output.output);
+    }
+
+    toplevel.popup_tree.node.reparent(toplevel.primary_output.layers.popups);
+    toplevel.surface_tree.node.lowerToBottom(); // TODO: fix unecessary damage
+
+    log.debug("commit {}x{} {}x{} {s}", .{
+        box.width, box.height, box.x, box.y, toplevel.primary_output.wlr_output.name,
     });
 }
 
@@ -223,7 +223,7 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.Xdg
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("new_popup", listener);
 
     hwc.desktop.XdgPopup.create(
-        server.allocator,
+        server.mem_allocator,
         wlr_xdg_popup,
         toplevel.popup_tree,
         toplevel.popup_tree,

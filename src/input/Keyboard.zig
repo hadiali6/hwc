@@ -100,11 +100,16 @@ fn handleKey(
 
     const keybind_executed = blk: {
         for (keysyms) |sym| {
-            log.debug("{s} key='{s}'", .{ @src().fn_name, inner_blk: {
-                var buffer: [64]u8 = undefined;
-                _ = sym.getName(&buffer, buffer.len);
-                break :inner_blk buffer;
-            } });
+            log.debug("{s} device='{s}' key='{s}' state='{s}'", .{
+                @src().fn_name,
+                hwc.input.Device.fromWlrInputDevice(&wlr_keyboard.base).identifier,
+                inner_blk: {
+                    var buffer: [64]u8 = undefined;
+                    _ = sym.getName(&buffer, buffer.len);
+                    break :inner_blk buffer;
+                },
+                @tagName(event.state),
+            });
 
             break :blk event.state == .pressed and vtKeybind(sym);
         } else break :blk false;

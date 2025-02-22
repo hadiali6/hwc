@@ -22,6 +22,20 @@ pub const desktop = struct {
             };
         }
 
+        pub fn sceneDescriptor(self: Focusable) ?*SceneDescriptor {
+            return switch (self) {
+                .toplevel => |toplevel| SceneDescriptor.fromNode(
+                    &toplevel.surface_tree.node,
+                ),
+
+                .layer_surface => |layer_surface| SceneDescriptor.fromNode(
+                    &layer_surface.wlr_scene_layer_surface.tree.node,
+                ),
+
+                .none => null,
+            };
+        }
+
         /// For logging purposes
         pub fn status(self: Focusable, buffer: []u8) ![]const u8 {
             return switch (self) {

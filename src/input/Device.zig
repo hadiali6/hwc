@@ -125,6 +125,6 @@ fn handleDestroy(
 
     log.info("{s}: identifier='{s}'", .{ @src().fn_name, device.identifier });
 
-    server.allocator.free(device.identifier);
-    server.allocator.destroy(device);
+    server.mem_allocator.free(device.identifier);
+    server.mem_allocator.destroy(device);
 }

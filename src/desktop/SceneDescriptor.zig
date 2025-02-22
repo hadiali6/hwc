@@ -61,9 +61,9 @@ pub fn fromNode(wlr_scene_node: *wlr.SceneNode) ?*hwc.desktop.SceneDescriptor {
 pub fn fromSurface(wlr_surface: *wlr.Surface) ?*hwc.desktop.SceneDescriptor {
     if (@as(?*wlr.SceneNode, @ptrFromInt(wlr_surface.getRootSurface().data))) |wlr_scene_node| {
         return fromNode(wlr_scene_node);
-    } else {
-        return null;
     }
+
+    return null;
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {
@@ -82,5 +82,5 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
         });
     }
 
-    server.allocator.destroy(scene_descriptor);
+    server.mem_allocator.destroy(scene_descriptor);
 }

@@ -33,13 +33,11 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.O
     const output = try allocator.create(hwc.desktop.Output);
     errdefer allocator.destroy(output);
 
-    {
+    if (wlr_output.isWl()) {
         const window_title = try fmt.allocPrintZ(allocator, "hwc - {s}", .{wlr_output.name});
         defer allocator.free(window_title);
 
-        if (wlr_output.isWl()) {
-            wlr_output.wlSetTitle(window_title);
-        }
+        wlr_output.wlSetTitle(window_title);
     }
 
     {
@@ -95,11 +93,11 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.O
         .wlr_scene_output = wlr_scene_output,
 
         .layers = .{
+            .popups = try server.surface_manager.wlr_scene.tree.createSceneTree(),
             .background = try server.surface_manager.wlr_scene.tree.createSceneTree(),
             .bottom = try server.surface_manager.wlr_scene.tree.createSceneTree(),
             .top = try server.surface_manager.wlr_scene.tree.createSceneTree(),
             .overlay = try server.surface_manager.wlr_scene.tree.createSceneTree(),
-            .popups = try server.surface_manager.wlr_scene.tree.createSceneTree(),
         },
     };
 
@@ -137,7 +135,7 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.O
 }
 
 pub fn fromWlrOutput(wlr_output: *wlr.Output) *hwc.desktop.Output {
-    return @as(?*hwc.desktop.Output, @ptrFromInt(wlr_output.data)) orelse unreachable;
+    return @as(?*hwc.desktop.Output, @ptrFromInt(wlr_output.data)).?;
 }
 
 pub fn layerSurfaceTree(self: hwc.desktop.Output, layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
@@ -165,7 +163,7 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) v
     output.request_state.link.remove();
     output.link.remove();
 
-    server.allocator.destroy(output);
+    server.mem_allocator.destroy(output);
 
     log.info("{s}: name='{s}'", .{ @src().fn_name, wlr_output.name });
 }

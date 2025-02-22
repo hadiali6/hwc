@@ -42,7 +42,7 @@ fn handleNewInput(
 ) void {
     const input_manager: *hwc.input.Manager = @fieldParentPtr("new_input", listener);
 
-    const device = hwc.input.Device.create(server.allocator, wlr_input_device) catch |err| {
+    const device = hwc.input.Device.create(server.mem_allocator, wlr_input_device) catch |err| {
         log.err(
             "{s} failed: '{}': name='{s}'",
             .{ @src().fn_name, err, wlr_input_device.name orelse "unkown" },

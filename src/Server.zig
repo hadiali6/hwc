@@ -13,7 +13,7 @@ const wlr = @import("wlroots");
 
 const hwc = @import("hwc");
 
-allocator: mem.Allocator,
+mem_allocator: mem.Allocator,
 
 wl_server: *wl.Server,
 
@@ -62,7 +62,7 @@ pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
     const wlr_renderer = try wlr.Renderer.autocreate(wlr_backend);
 
     self.* = .{
-        .allocator = allocator,
+        .mem_allocator = allocator,
         .wl_server = wl_server,
 
         .sig_interrupt_source = try wl_event_loop.addSignal(

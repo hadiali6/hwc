@@ -208,6 +208,10 @@ fn handlePointerButton(
             cursor.wlr_cursor.x,
             cursor.wlr_cursor.y,
         )) |result| {
+            std.debug.print(
+                "{?*} {*} {} {}\n",
+                .{ result.wlr_surface, result.wlr_scene_node, result.sx, result.sy },
+            );
             if (hwc.desktop.SceneDescriptor.fromNode(result.wlr_scene_node)) |scene_descriptor| {
                 seat.focus(scene_descriptor.focusable);
             }
@@ -320,6 +324,7 @@ fn move(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
     toplevel.x = @as(i32, @intFromFloat(self.wlr_cursor.x - self.grab_x));
     toplevel.y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
 
+    toplevel.popup_tree.node.setPosition(toplevel.x, toplevel.y);
     toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
 }
 
@@ -362,6 +367,7 @@ fn resize(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
     toplevel.x = new_left - geo_box.x;
     toplevel.y = new_top - geo_box.y;
     toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
+    toplevel.popup_tree.node.setPosition(toplevel.x, toplevel.y);
 
     const new_width = new_right - new_left;
     const new_height = new_bottom - new_top;

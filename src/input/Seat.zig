@@ -16,8 +16,12 @@ focused: hwc.desktop.Focusable = .none,
 focused_output: ?*hwc.desktop.Output = null,
 
 destroy: wl.Listener(*wlr.Seat) = wl.Listener(*wlr.Seat).init(handleDestroy),
+
 focused_output_destroy: wl.Listener(*wlr.Output) =
     wl.Listener(*wlr.Output).init(handleFocusedOutputDestroy),
+focused_scene_descriptor_destroy: wl.Listener(void) =
+    wl.Listener(void).init(handleFocusedSceneDescriptorDestroy),
+
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) =
     wl.Listener(*wlr.Seat.event.RequestSetCursor).init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) =
@@ -54,6 +58,29 @@ pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
         return;
     }
 
+    self.cleanupFocus();
+    self.rawFocus(target);
+}
+
+fn cleanupFocus(self: *hwc.input.Seat) void {
+    switch (self.focused) {
+        .toplevel => |toplevel| {
+            _ = toplevel.wlr_xdg_toplevel.setActivated(false);
+            toplevel.destroyPopups();
+        },
+        .layer_surface => |layer_surface| {
+            // TODO
+            _ = layer_surface;
+        },
+        .none => {},
+    }
+
+    if (self.focused != .none) {
+        self.focused_scene_descriptor_destroy.link.remove();
+    }
+}
+
+fn rawFocus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
     {
         var focused_buffer: [1024]u8 = undefined;
         var target_buffer: [1024]u8 = undefined;
@@ -67,18 +94,6 @@ pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
         });
     }
 
-    switch (self.focused) {
-        .toplevel => |toplevel| {
-            _ = toplevel.wlr_xdg_toplevel.setActivated(false);
-            toplevel.destroyPopups();
-        },
-        // TODO
-        .layer_surface => |layer_surface| {
-            _ = layer_surface;
-        },
-        .none => {},
-    }
-
     self.focused = target;
 
     switch (target) {
@@ -86,13 +101,17 @@ pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
             toplevel.surface_tree.node.raiseToTop();
             _ = toplevel.wlr_xdg_toplevel.setActivated(true);
         },
-        // TODO
         .layer_surface => |layer_surface| {
+            // TODO
             _ = layer_surface;
         },
         .none => {
             self.wlr_seat.keyboardClearFocus();
         },
+    }
+
+    if (target.sceneDescriptor()) |scene_descriptor| {
+        scene_descriptor.wlr_scene_node.events.destroy.add(&self.focused_scene_descriptor_destroy);
     }
 
     if (target.wlrSurface()) |wlr_surface| {
@@ -106,13 +125,8 @@ pub fn focusOutput(self: *hwc.input.Seat, output: *hwc.desktop.Output) void {
     }
 
     if (self.focused_output) |focused_output| {
-        if (focused_output.wlr_output == output.wlr_output) {
-            return;
-        }
-
-        self.focused_output_destroy.link.remove();
-
         assert(focused_output.wlr_output != output.wlr_output);
+        self.focused_output_destroy.link.remove();
     }
 
     log.debug("{s}: '{?s}' -> '{s}'", .{
@@ -179,6 +193,11 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Seat), wlr_seat: *wlr.Seat) void {
 fn handleFocusedOutputDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     const seat: *hwc.input.Seat = @fieldParentPtr("focused_output_destroy", listener);
     seat.focused_output = null;
+}
+
+fn handleFocusedSceneDescriptorDestroy(listener: *wl.Listener(void)) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("focused_scene_descriptor_destroy", listener);
+    seat.rawFocus(.none);
 }
 
 fn handleRequestSetCursor(

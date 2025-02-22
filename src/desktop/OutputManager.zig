@@ -64,7 +64,7 @@ pub fn deinit(self: *hwc.desktop.OutputManager) void {
 fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
     const output_manager: *hwc.desktop.OutputManager = @fieldParentPtr("new_output", listener);
 
-    const output = hwc.desktop.Output.create(server.allocator, wlr_output) catch |err| {
+    const output = hwc.desktop.Output.create(server.mem_allocator, wlr_output) catch |err| {
         log.err("{s} failed: '{}': name='{s}'", .{ @src().fn_name, err, wlr_output.name });
         wlr_output.destroy();
 

@@ -49,6 +49,8 @@ pub fn create(allocator: mem.Allocator, wlr_layer_surface: *wlr.LayerSurfaceV1) 
         .{ .layer_surface = layer_surface },
     );
 
+    wlr_layer_surface.surface.data = @intFromPtr(&layer_surface.wlr_scene_layer_surface.tree.node);
+
     wlr_layer_surface.events.destroy.add(&layer_surface.destroy);
     wlr_layer_surface.events.new_popup.add(&layer_surface.new_popup);
     wlr_layer_surface.surface.events.map.add(&layer_surface.map);
@@ -80,14 +82,14 @@ fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfa
 
     log.info("{s}: namespace='{s}'", .{ @src().fn_name, layer_surface.wlr_layer_surface.namespace });
 
-    server.allocator.destroy(layer_surface);
+    server.mem_allocator.destroy(layer_surface);
 }
 
 fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.XdgPopup) void {
     const layer_surface: *hwc.desktop.LayerSurface = @fieldParentPtr("new_popup", listener);
 
     hwc.desktop.XdgPopup.create(
-        server.allocator,
+        server.mem_allocator,
         wlr_xdg_popup,
         layer_surface.popup_tree,
         layer_surface.popup_tree,

@@ -87,7 +87,7 @@ fn handleNewToplevel(
     const surface_manager: *hwc.desktop.SurfaceManager = @fieldParentPtr("new_toplevel", listener);
 
     const toplevel = hwc.desktop.XdgToplevel.create(
-        server.allocator,
+        server.mem_allocator,
         wlr_xdg_toplevel,
     ) catch |err| {
         log.err("{s} failed: '{}'", .{ @src().fn_name, err });
@@ -118,7 +118,7 @@ fn handleNewLayerSurface(
         wlr_layer_surface.output = output.wlr_output;
     }
 
-    hwc.desktop.LayerSurface.create(server.allocator, wlr_layer_surface) catch |err| {
+    hwc.desktop.LayerSurface.create(server.mem_allocator, wlr_layer_surface) catch |err| {
         log.err("{s} failed: '{}'", .{ @src().fn_name, err });
 
         if (err == error.OutOfMemory) {
