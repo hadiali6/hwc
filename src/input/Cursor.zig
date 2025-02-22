@@ -1,81 +1,79 @@
 const std = @import("std");
-const log = std.log.scoped(.cursor);
+const log = std.log.scoped(.@"input.Cursor");
+const mem = std.mem;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 
-const hwc = @import("../hwc.zig");
-const util = @import("../util.zig");
+const hwc = @import("hwc");
+const server = &hwc.server;
 
-const server = &@import("root").server;
-
-const Mode = enum { passthrough, move, resize };
-
-const LayoutPoint = struct {
-    lx: f64,
-    ly: f64,
+const ImageName = enum {
+    default,
+    move,
+    @"n-resize",
+    @"nw-resize",
+    @"ne-resize",
+    @"s-resize",
+    @"sw-resize",
+    @"se-resize",
+    @"w-resize",
+    @"e-resize",
 };
 
 wlr_cursor: *wlr.Cursor,
-xcursor_manager: *wlr.XcursorManager,
+wlr_xcursor_manager: *wlr.XcursorManager,
 
-/// The pointer constraint for the surface that currently has keyboard focus, if any.
-/// This constraint is not necessarily active, activation only occurs once the cursor
-/// has been moved inside the constraint region.
-constraint: ?*hwc.input.PointerConstraint = null,
+mode: union(enum) {
+    passthrough,
+    move: *hwc.desktop.XdgToplevel,
+    resize: *hwc.desktop.XdgToplevel,
+} = .passthrough,
 
-/// Keeps track of the last known location of all touch points in layout coordinates.
-/// This information is necessary for proper touch dnd support if there are multiple touch points.
-touch_points: std.AutoHashMapUnmanaged(i32, LayoutPoint) = .{},
-
-mode: Mode = .passthrough,
-grabbed_toplevel: ?*hwc.XdgToplevel = null,
 grab_x: f64 = 0,
 grab_y: f64 = 0,
 grab_box: wlr.Box = undefined,
 resize_edges: wlr.Edges = .{},
 
+frame: wl.Listener(*wlr.Cursor) = wl.Listener(*wlr.Cursor).init(handleFrame),
+
 axis: wl.Listener(*wlr.Pointer.event.Axis) =
-    wl.Listener(*wlr.Pointer.event.Axis).init(handleAxis),
+    wl.Listener(*wlr.Pointer.event.Axis).init(handlePointerAxis),
 button: wl.Listener(*wlr.Pointer.event.Button) =
-    wl.Listener(*wlr.Pointer.event.Button).init(handleButton),
-frame: wl.Listener(*wlr.Cursor) =
-    wl.Listener(*wlr.Cursor).init(handleFrame),
+    wl.Listener(*wlr.Pointer.event.Button).init(handlePointerButton),
 motion: wl.Listener(*wlr.Pointer.event.Motion) =
-    wl.Listener(*wlr.Pointer.event.Motion).init(handleMotion),
+    wl.Listener(*wlr.Pointer.event.Motion).init(handlePointerMotion),
 motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) =
-    wl.Listener(*wlr.Pointer.event.MotionAbsolute).init(handleMotionAbsolute),
+    wl.Listener(*wlr.Pointer.event.MotionAbsolute).init(handlePointerMotionAbsolute),
 
 pinch_begin: wl.Listener(*wlr.Pointer.event.PinchBegin) =
-    wl.Listener(*wlr.Pointer.event.PinchBegin).init(handlePinchBegin),
+    wl.Listener(*wlr.Pointer.event.PinchBegin).init(handlePointerPinchBegin),
 pinch_update: wl.Listener(*wlr.Pointer.event.PinchUpdate) =
-    wl.Listener(*wlr.Pointer.event.PinchUpdate).init(handlePinchUpdate),
+    wl.Listener(*wlr.Pointer.event.PinchUpdate).init(handlePointerPinchUpdate),
 pinch_end: wl.Listener(*wlr.Pointer.event.PinchEnd) =
-    wl.Listener(*wlr.Pointer.event.PinchEnd).init(handlePinchEnd),
+    wl.Listener(*wlr.Pointer.event.PinchEnd).init(handlePointerPinchEnd),
 
 swipe_begin: wl.Listener(*wlr.Pointer.event.SwipeBegin) =
-    wl.Listener(*wlr.Pointer.event.SwipeBegin).init(handleSwipeBegin),
+    wl.Listener(*wlr.Pointer.event.SwipeBegin).init(handlePointerSwipeBegin),
 swipe_update: wl.Listener(*wlr.Pointer.event.SwipeUpdate) =
-    wl.Listener(*wlr.Pointer.event.SwipeUpdate).init(handleSwipeUpdate),
+    wl.Listener(*wlr.Pointer.event.SwipeUpdate).init(handlePointerSwipeUpdate),
 swipe_end: wl.Listener(*wlr.Pointer.event.SwipeEnd) =
-    wl.Listener(*wlr.Pointer.event.SwipeEnd).init(handleSwipeEnd),
+    wl.Listener(*wlr.Pointer.event.SwipeEnd).init(handlePointerSwipeEnd),
 
 hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) =
-    wl.Listener(*wlr.Pointer.event.HoldBegin).init(handleHoldBegin),
+    wl.Listener(*wlr.Pointer.event.HoldBegin).init(handlePointerHoldBegin),
 hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) =
-    wl.Listener(*wlr.Pointer.event.HoldEnd).init(handleHoldEnd),
+    wl.Listener(*wlr.Pointer.event.HoldEnd).init(handlePointerHoldEnd),
 
-touch_up: wl.Listener(*wlr.Touch.event.Up) =
-    wl.Listener(*wlr.Touch.event.Up).init(handleTouchUp),
+touch_up: wl.Listener(*wlr.Touch.event.Up) = wl.Listener(*wlr.Touch.event.Up).init(handleTouchUp),
 touch_down: wl.Listener(*wlr.Touch.event.Down) =
     wl.Listener(*wlr.Touch.event.Down).init(handleTouchDown),
 touch_motion: wl.Listener(*wlr.Touch.event.Motion) =
     wl.Listener(*wlr.Touch.event.Motion).init(handleTouchMotion),
 touch_cancel: wl.Listener(*wlr.Touch.event.Cancel) =
     wl.Listener(*wlr.Touch.event.Cancel).init(handleTouchCancel),
-touch_frame: wl.Listener(void) =
-    wl.Listener(void).init(handleTouchFrame),
+touch_frame: wl.Listener(void) = wl.Listener(void).init(handleTouchFrame),
 
 tablet_tool_axis: wl.Listener(*wlr.Tablet.event.Axis) =
     wl.Listener(*wlr.Tablet.event.Axis).init(handleTabletToolAxis),
@@ -89,11 +87,11 @@ tablet_tool_button: wl.Listener(*wlr.Tablet.event.Button) =
 pub fn init(self: *hwc.input.Cursor) !void {
     self.* = .{
         .wlr_cursor = try wlr.Cursor.create(),
-        .xcursor_manager = try wlr.XcursorManager.create(null, 24),
+        .wlr_xcursor_manager = try wlr.XcursorManager.create(null, 24),
     };
 
-    self.wlr_cursor.attachOutputLayout(server.output_layout);
-    try self.xcursor_manager.load(1);
+    self.wlr_cursor.attachOutputLayout(server.output_manager.wlr_output_layout);
+    try self.wlr_xcursor_manager.load(1);
 
     self.wlr_cursor.events.axis.add(&self.axis);
     self.wlr_cursor.events.button.add(&self.button);
@@ -122,6 +120,8 @@ pub fn init(self: *hwc.input.Cursor) !void {
     self.wlr_cursor.events.tablet_tool_proximity.add(&self.tablet_tool_proximity);
     self.wlr_cursor.events.tablet_tool_tip.add(&self.tablet_tool_tip);
     self.wlr_cursor.events.tablet_tool_button.add(&self.tablet_tool_button);
+
+    log.info("{s}", .{@src().fn_name});
 }
 
 pub fn deinit(self: *hwc.input.Cursor) void {
@@ -142,15 +142,32 @@ pub fn deinit(self: *hwc.input.Cursor) void {
     self.hold_begin.link.remove();
     self.hold_end.link.remove();
 
+    log.info("{s}", .{@src().fn_name});
+
     self.wlr_cursor.destroy();
+    self.wlr_xcursor_manager.destroy();
 }
 
-fn handleAxis(
-    _: *wl.Listener(*wlr.Pointer.event.Axis),
+fn getSeat(self: *hwc.input.Cursor) *hwc.input.Seat {
+    return @fieldParentPtr("cursor", self);
+}
+
+fn handleFrame(listener: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("frame", listener);
+    const seat = cursor.getSeat();
+    seat.wlr_seat.pointerNotifyFrame();
+}
+
+fn handlePointerAxis(
+    listener: *wl.Listener(*wlr.Pointer.event.Axis),
     event: *wlr.Pointer.event.Axis,
 ) void {
-    server.input_manager.handleActivity();
-    server.input_manager.defaultSeat().wlr_seat.pointerNotifyAxis(
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("axis", listener);
+    const seat = cursor.getSeat();
+
+    // TODO pointer scroll wheel binding
+
+    seat.wlr_seat.pointerNotifyAxis(
         event.time_msec,
         event.orientation,
         event.delta,
@@ -158,73 +175,77 @@ fn handleAxis(
         event.source,
         event.relative_direction,
     );
+
+    log.debug(
+        "{s}: device='{s}' scroll='{s}' orientation='{s}' source='{s}' relative_direction='{s}'",
+        .{
+            @src().fn_name,
+            hwc.input.Device.fromWlrInputDevice(event.device).identifier,
+            if (event.delta_discrete > 0) "down" else "up",
+            @tagName(event.orientation),
+            @tagName(event.source),
+            @tagName(event.relative_direction),
+        },
+    );
 }
 
-fn handleButton(
+fn handlePointerButton(
     listener: *wl.Listener(*wlr.Pointer.event.Button),
     event: *wlr.Pointer.event.Button,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("button", listener);
+    const seat = cursor.getSeat();
 
-    server.input_manager.handleActivity();
-    _ = server.input_manager.defaultSeat().wlr_seat.pointerNotifyButton(
-        event.time_msec,
-        event.button,
-        event.state,
-    );
+    // TODO pointer button binding
 
-    if (event.state == .released) {
-        cursor.mode = .passthrough;
-        return;
-    }
+    _ = seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
+    switch (event.state) {
+        .released => {
+            cursor.mode = .passthrough;
+        },
 
-    if (server.resultAt(cursor.wlr_cursor.x, cursor.wlr_cursor.y)) |result| {
-        if (hwc.Focusable.fromNode(result.wlr_scene_node)) |focusable| {
-            // TODO: choose a proper seat so other seats arent bothered
-            var iterator = server.input_manager.seats.iterator(.forward);
-            while (iterator.next()) |seat| {
-                seat.focus(focusable.*);
+        .pressed => if (server.surface_manager.resultAt(
+            cursor.wlr_cursor.x,
+            cursor.wlr_cursor.y,
+        )) |result| {
+            std.debug.print(
+                "{?*} {*} {} {}\n",
+                .{ result.wlr_surface, result.wlr_scene_node, result.sx, result.sy },
+            );
+            if (hwc.desktop.SceneDescriptor.fromNode(result.wlr_scene_node)) |scene_descriptor| {
+                seat.focus(scene_descriptor.focusable);
             }
-        }
+        },
+
+        else => unreachable,
     }
+
+    log.debug("{s}: device='{s}' button='{?s}' state='{s}'", .{
+        @src().fn_name,
+        hwc.input.Device.fromWlrInputDevice(event.device).identifier,
+        hwc.input.util.linuxInputEventCodeToString(.pointer, event.button),
+        @tagName(event.state),
+    });
 }
 
-fn handleFrame(_: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
-    server.input_manager.defaultSeat().wlr_seat.pointerNotifyFrame();
-}
-
-fn handleMotion(
+// TODO (bad)
+fn handlePointerMotion(
     listener: *wl.Listener(*wlr.Pointer.event.Motion),
     event: *wlr.Pointer.event.Motion,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("motion", listener);
 
-    server.input_manager.handleActivity();
-
-    var dx: f64 = event.delta_x;
-    var dy: f64 = event.delta_y;
-
-    if (cursor.constraint) |constraint| {
-        if (constraint.state == .active) {
-            switch (constraint.wlr_pointer_constraint.type) {
-                .locked => {
-                    sendRelativeMotion(
-                        event.time_msec,
-                        event.delta_x,
-                        event.delta_y,
-                        event.unaccel_dx,
-                        event.unaccel_dy,
-                    );
-                    return;
-                },
-                .confined => constraint.confine(&dx, &dy),
-            }
-        }
+    if (server.output_manager.wlr_output_layout.outputAt(
+        cursor.wlr_cursor.x,
+        cursor.wlr_cursor.y,
+    )) |wlr_output| {
+        const output = hwc.desktop.Output.fromWlrOutput(wlr_output);
+        const seat = cursor.getSeat();
+        seat.focusOutput(output);
     }
 
-    cursor.wlr_cursor.move(event.device, dx, dy);
-
     cursor.processMotion(
+        event.device,
         event.time_msec,
         event.delta_x,
         event.delta_y,
@@ -233,133 +254,84 @@ fn handleMotion(
     );
 }
 
-fn handleMotionAbsolute(
+// TODO (bad)
+fn handlePointerMotionAbsolute(
     listener: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
     event: *wlr.Pointer.event.MotionAbsolute,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("motion_absolute", listener);
 
-    server.input_manager.handleActivity();
-    cursor.wlr_cursor.warpAbsolute(event.device, event.x, event.y);
-
     var lx: f64 = undefined;
     var ly: f64 = undefined;
-    cursor.wlr_cursor.absoluteToLayoutCoords(
-        event.device,
-        event.x,
-        event.y,
-        &lx,
-        &ly,
-    );
+    cursor.wlr_cursor.absoluteToLayoutCoords(event.device, event.x, event.y, &lx, &ly);
 
     const dx = lx - cursor.wlr_cursor.x;
     const dy = ly - cursor.wlr_cursor.y;
 
-    cursor.processMotion(event.time_msec, dx, dy, dx, dy);
+    cursor.processMotion(event.device, event.time_msec, dx, dy, dx, dy);
 }
 
-fn sendRelativeMotion(
-    time_msec: u32,
-    dx: f64,
-    dy: f64,
-    unaccel_dx: f64,
-    unaccel_dy: f64,
-) void {
-    server.input_manager.relative_pointer_manager.sendRelativeMotion(
-        server.input_manager.defaultSeat().wlr_seat,
-        @as(u64, time_msec) * 1000,
-        dx,
-        dy,
-        unaccel_dx,
-        unaccel_dy,
-    );
-}
-
+// TODO (bad)
 fn processMotion(
     self: *hwc.input.Cursor,
+    wlr_input_device: *wlr.InputDevice,
     time_msec: u32,
     delta_x: f64,
     delta_y: f64,
     unaccel_dx: f64,
     unaccel_dy: f64,
 ) void {
-    sendRelativeMotion(time_msec, delta_x, delta_y, unaccel_dx, unaccel_dy);
+    const seat = self.getSeat();
 
+    server.input_manager.wlr_relative_pointer_manager.sendRelativeMotion(
+        seat.wlr_seat,
+        @as(u64, time_msec) * 1000,
+        delta_x,
+        delta_y,
+        unaccel_dx,
+        unaccel_dy,
+    );
+
+    self.wlr_cursor.move(wlr_input_device, delta_x, delta_y);
     switch (self.mode) {
         .passthrough => {
             self.passthrough(time_msec);
-            if (self.constraint) |constraint| {
-                constraint.maybeActivate();
-            }
         },
-        .move => self.move(),
-        .resize => self.resize(),
+        .move => |toplevel| self.move(toplevel),
+        .resize => |toplevel| self.resize(toplevel),
     }
 }
 
+// TODO (bad)
 fn passthrough(self: *hwc.input.Cursor, time_msec: u32) void {
-    const wlr_seat = server.input_manager.defaultSeat().wlr_seat;
+    const seat = self.getSeat();
 
-    if (server.resultAt(self.wlr_cursor.x, self.wlr_cursor.y)) |result| {
+    if (server.surface_manager.resultAt(self.wlr_cursor.x, self.wlr_cursor.y)) |result| {
         if (result.wlr_surface) |wlr_surface| {
-            wlr_seat.pointerNotifyEnter(wlr_surface, result.sx, result.sy);
-            wlr_seat.pointerNotifyMotion(time_msec, result.sx, result.sy);
-        }
-    } else {
-        self.wlr_cursor.setXcursor(self.xcursor_manager, "default");
-        wlr_seat.pointerClearFocus();
+            seat.wlr_seat.pointerNotifyEnter(wlr_surface, result.sx, result.sy);
+            seat.wlr_seat.pointerNotifyMotion(time_msec, result.sx, result.sy);
+        } else unreachable;
+
+        return;
     }
+
+    self.wlr_cursor.setXcursor(self.wlr_xcursor_manager, "default");
+    seat.wlr_seat.pointerClearFocus();
 }
 
-fn move(self: *hwc.input.Cursor) void {
-    const toplevel: *hwc.XdgToplevel = self.grabbed_toplevel orelse blk: {
-        const result = server.resultAt(self.wlr_cursor.x, self.wlr_cursor.y) orelse return;
-        const focusable = hwc.Focusable.fromNode(result.wlr_scene_node) orelse return;
+// TODO (bad)
+fn move(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
+    toplevel.x = @as(i32, @intFromFloat(self.wlr_cursor.x - self.grab_x));
+    toplevel.y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
 
-        if (focusable.* == .toplevel) {
-            break :blk focusable.toplevel;
-        } else {
-            // TODO: handle different surface types?
-            return;
-        }
-    };
-
-    toplevel.geometry.x = @as(
-        i32,
-        @intFromFloat(self.wlr_cursor.x - self.grab_x),
-    );
-    toplevel.geometry.y = @as(
-        i32,
-        @intFromFloat(self.wlr_cursor.y - self.grab_y),
-    );
-
-    toplevel.scene_tree.node.setPosition(
-        toplevel.geometry.x,
-        toplevel.geometry.y,
-    );
+    toplevel.popup_tree.node.setPosition(toplevel.x, toplevel.y);
+    toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
 }
 
-fn resize(self: *hwc.input.Cursor) void {
-    const toplevel: *hwc.XdgToplevel = self.grabbed_toplevel orelse blk: {
-        const result = server.resultAt(self.wlr_cursor.x, self.wlr_cursor.y) orelse return;
-        const focusable = hwc.Focusable.fromNode(result.wlr_scene_node) orelse return;
-
-        if (focusable.* == .toplevel) {
-            break :blk focusable.toplevel;
-        } else {
-            // TODO: handle different surface types?
-            return;
-        }
-    };
-
-    const border_x = @as(
-        i32,
-        @intFromFloat(self.wlr_cursor.x - self.grab_x),
-    );
-    const border_y = @as(
-        i32,
-        @intFromFloat(self.wlr_cursor.y - self.grab_y),
-    );
+// TODO (bad)
+fn resize(self: *hwc.input.Cursor, toplevel: *hwc.desktop.XdgToplevel) void {
+    const border_x = @as(i32, @intFromFloat(self.wlr_cursor.x - self.grab_x));
+    const border_y = @as(i32, @intFromFloat(self.wlr_cursor.y - self.grab_y));
 
     var new_left = self.grab_box.x;
     var new_right = self.grab_box.x + self.grab_box.width;
@@ -368,51 +340,61 @@ fn resize(self: *hwc.input.Cursor) void {
 
     if (self.resize_edges.top) {
         new_top = border_y;
-        if (new_top >= new_bottom) new_top = new_bottom - 1;
+        if (new_top >= new_bottom) {
+            new_top = new_bottom - 1;
+        }
     } else if (self.resize_edges.bottom) {
         new_bottom = border_y;
-        if (new_bottom <= new_top) new_bottom = new_top + 1;
+        if (new_bottom <= new_top) {
+            new_bottom = new_top + 1;
+        }
     }
 
     if (self.resize_edges.left) {
         new_left = border_x;
-        if (new_left >= new_right) new_left = new_right - 1;
+        if (new_left >= new_right) {
+            new_left = new_right - 1;
+        }
     } else if (self.resize_edges.right) {
         new_right = border_x;
-        if (new_right <= new_left) new_right = new_left + 1;
+        if (new_right <= new_left) {
+            new_right = new_left + 1;
+        }
     }
 
     var geo_box: wlr.Box = undefined;
-    toplevel.xdg_toplevel.base.getGeometry(&geo_box);
-    toplevel.geometry.x = new_left - geo_box.x;
-    toplevel.geometry.y = new_top - geo_box.y;
-    toplevel.scene_tree.node.setPosition(
-        toplevel.geometry.x,
-        toplevel.geometry.y,
-    );
+    toplevel.wlr_xdg_toplevel.base.getGeometry(&geo_box);
+    toplevel.x = new_left - geo_box.x;
+    toplevel.y = new_top - geo_box.y;
+    toplevel.surface_tree.node.setPosition(toplevel.x, toplevel.y);
+    toplevel.popup_tree.node.setPosition(toplevel.x, toplevel.y);
 
     const new_width = new_right - new_left;
     const new_height = new_bottom - new_top;
-    _ = toplevel.xdg_toplevel.setSize(new_width, new_height);
+    _ = toplevel.wlr_xdg_toplevel.setSize(new_width, new_height);
 }
 
-fn handlePinchBegin(
-    _: *wl.Listener(*wlr.Pointer.event.PinchBegin),
+fn handlePointerPinchBegin(
+    listener: *wl.Listener(*wlr.Pointer.event.PinchBegin),
     event: *wlr.Pointer.event.PinchBegin,
 ) void {
-    server.input_manager.pointer_gestures.sendPinchBegin(
-        server.input_manager.defaultSeat().wlr_seat,
-        event.time_msec,
-        event.fingers,
-    );
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("pinch_begin", listener);
+    const seat = cursor.getSeat();
+    const wlr_pointer_gestures = server.input_manager.wlr_pointer_gestures;
+
+    wlr_pointer_gestures.sendPinchBegin(seat.wlr_seat, event.time_msec, event.fingers);
 }
 
-fn handlePinchUpdate(
-    _: *wl.Listener(*wlr.Pointer.event.PinchUpdate),
+fn handlePointerPinchUpdate(
+    listener: *wl.Listener(*wlr.Pointer.event.PinchUpdate),
     event: *wlr.Pointer.event.PinchUpdate,
 ) void {
-    server.input_manager.pointer_gestures.sendPinchUpdate(
-        server.input_manager.defaultSeat().wlr_seat,
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("pinch_update", listener);
+    const seat = cursor.getSeat();
+    const wlr_pointer_gestures = server.input_manager.wlr_pointer_gestures;
+
+    wlr_pointer_gestures.sendPinchUpdate(
+        seat.wlr_seat,
         event.time_msec,
         event.dx,
         event.dy,
@@ -421,230 +403,181 @@ fn handlePinchUpdate(
     );
 }
 
-fn handlePinchEnd(
-    _: *wl.Listener(*wlr.Pointer.event.PinchEnd),
+fn handlePointerPinchEnd(
+    listener: *wl.Listener(*wlr.Pointer.event.PinchEnd),
     event: *wlr.Pointer.event.PinchEnd,
 ) void {
-    server.input_manager.pointer_gestures.sendPinchEnd(
-        server.input_manager.defaultSeat().wlr_seat,
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("pinch_end", listener);
+    const seat = cursor.getSeat();
+    const wlr_pointer_gestures = server.input_manager.wlr_pointer_gestures;
+
+    wlr_pointer_gestures.sendPinchEnd(
+        seat.wlr_seat,
         event.time_msec,
         event.cancelled,
     );
 }
 
-fn handleSwipeBegin(
-    _: *wl.Listener(*wlr.Pointer.event.SwipeBegin),
+fn handlePointerSwipeBegin(
+    listener: *wl.Listener(*wlr.Pointer.event.SwipeBegin),
     event: *wlr.Pointer.event.SwipeBegin,
 ) void {
-    server.input_manager.pointer_gestures.sendSwipeBegin(
-        server.input_manager.defaultSeat().wlr_seat,
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("swipe_begin", listener);
+    const seat = cursor.getSeat();
+    const wlr_pointer_gestures = server.input_manager.wlr_pointer_gestures;
+
+    wlr_pointer_gestures.sendSwipeBegin(
+        seat.wlr_seat,
         event.time_msec,
         event.fingers,
     );
 }
 
-fn handleSwipeUpdate(
-    _: *wl.Listener(*wlr.Pointer.event.SwipeUpdate),
+fn handlePointerSwipeUpdate(
+    listener: *wl.Listener(*wlr.Pointer.event.SwipeUpdate),
     event: *wlr.Pointer.event.SwipeUpdate,
 ) void {
-    server.input_manager.pointer_gestures.sendSwipeUpdate(
-        server.input_manager.defaultSeat().wlr_seat,
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("swipe_update", listener);
+    const seat = cursor.getSeat();
+    const wlr_pointer_gestures = server.input_manager.wlr_pointer_gestures;
+
+    wlr_pointer_gestures.sendSwipeUpdate(
+        seat.wlr_seat,
         event.time_msec,
         event.dx,
         event.dy,
     );
 }
 
-fn handleSwipeEnd(
-    _: *wl.Listener(*wlr.Pointer.event.SwipeEnd),
+fn handlePointerSwipeEnd(
+    listener: *wl.Listener(*wlr.Pointer.event.SwipeEnd),
     event: *wlr.Pointer.event.SwipeEnd,
 ) void {
-    server.input_manager.pointer_gestures.sendPinchEnd(
-        server.input_manager.defaultSeat().wlr_seat,
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("swipe_end", listener);
+    const seat = cursor.getSeat();
+    const wlr_pointer_gestures = server.input_manager.wlr_pointer_gestures;
+
+    wlr_pointer_gestures.sendPinchEnd(
+        seat.wlr_seat,
         event.time_msec,
         event.cancelled,
     );
 }
 
-fn handleHoldBegin(
-    _: *wl.Listener(*wlr.Pointer.event.HoldBegin),
+fn handlePointerHoldBegin(
+    listener: *wl.Listener(*wlr.Pointer.event.HoldBegin),
     event: *wlr.Pointer.event.HoldBegin,
 ) void {
-    server.input_manager.pointer_gestures.sendHoldBegin(
-        server.input_manager.defaultSeat().wlr_seat,
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("hold_begin", listener);
+    const seat = cursor.getSeat();
+    const wlr_pointer_gestures = server.input_manager.wlr_pointer_gestures;
+
+    wlr_pointer_gestures.sendHoldBegin(
+        seat.wlr_seat,
         event.time_msec,
         event.fingers,
     );
 }
 
-fn handleHoldEnd(
-    _: *wl.Listener(*wlr.Pointer.event.HoldEnd),
+fn handlePointerHoldEnd(
+    listener: *wl.Listener(*wlr.Pointer.event.HoldEnd),
     event: *wlr.Pointer.event.HoldEnd,
 ) void {
-    server.input_manager.pointer_gestures.sendHoldEnd(
-        server.input_manager.defaultSeat().wlr_seat,
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("hold_end", listener);
+    const seat = cursor.getSeat();
+    const wlr_pointer_gestures = server.input_manager.wlr_pointer_gestures;
+
+    wlr_pointer_gestures.sendHoldEnd(
+        seat.wlr_seat,
         event.time_msec,
         event.cancelled,
     );
 }
 
-fn handleTouchUp(listener: *wl.Listener(*wlr.Touch.event.Up), event: *wlr.Touch.event.Up) void {
+// TODO
+fn handleTouchUp(
+    listener: *wl.Listener(*wlr.Touch.event.Up),
+    event: *wlr.Touch.event.Up,
+) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_up", listener);
-
-    server.input_manager.handleActivity();
-
-    if (cursor.touch_points.remove(event.touch_id)) {
-        _ = server.input_manager.defaultSeat().wlr_seat.touchNotifyUp(event.time_msec, event.touch_id);
-    }
+    _ = cursor;
+    _ = event;
 }
 
-fn handleTouchDown(listener: *wl.Listener(*wlr.Touch.event.Down), event: *wlr.Touch.event.Down) void {
+// TODO
+fn handleTouchDown(
+    listener: *wl.Listener(*wlr.Touch.event.Down),
+    event: *wlr.Touch.event.Down,
+) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_down", listener);
-
-    server.input_manager.handleActivity();
-
-    var lx: f64 = undefined;
-    var ly: f64 = undefined;
-    cursor.wlr_cursor.absoluteToLayoutCoords(event.device, event.x, event.y, &lx, &ly);
-
-    cursor.touch_points.putNoClobber(util.allocator, event.touch_id, .{ .lx = lx, .ly = ly }) catch {
-        log.err("out of memory", .{});
-        return;
-    };
-
-    if (server.resultAt(lx, ly)) |result| {
-        if (hwc.Focusable.fromNode(result.wlr_scene_node)) |focusable| {
-            // TODO: choose a proper seat so other seats arent bothered
-            var iterator = server.input_manager.seats.iterator(.forward);
-            while (iterator.next()) |seat| {
-                seat.focus(focusable.*);
-            }
-        }
-
-        if (result.wlr_surface) |wlr_surface| {
-            _ = server.input_manager.defaultSeat().wlr_seat.touchNotifyDown(
-                wlr_surface,
-                event.time_msec,
-                event.touch_id,
-                event.x,
-                event.y,
-            );
-        }
-    }
+    _ = cursor;
+    _ = event;
 }
 
-fn handleTouchMotion(listener: *wl.Listener(*wlr.Touch.event.Motion), event: *wlr.Touch.event.Motion) void {
+// TODO
+fn handleTouchMotion(
+    listener: *wl.Listener(*wlr.Touch.event.Motion),
+    event: *wlr.Touch.event.Motion,
+) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_motion", listener);
-
-    server.input_manager.handleActivity();
-
-    if (cursor.touch_points.getPtr(event.touch_id)) |point| {
-        cursor.wlr_cursor.absoluteToLayoutCoords(
-            event.device,
-            event.x,
-            event.y,
-            &point.lx,
-            &point.ly,
-        );
-
-        if (server.resultAt(point.lx, point.ly)) |result| {
-            server.input_manager.defaultSeat().wlr_seat.touchNotifyMotion(
-                event.time_msec,
-                event.touch_id,
-                result.sx,
-                result.sy,
-            );
-        }
-    }
+    _ = cursor;
+    _ = event;
 }
 
+// TODO
 fn handleTouchCancel(
     listener: *wl.Listener(*wlr.Touch.event.Cancel),
-    _: *wlr.Touch.event.Cancel,
+    event: *wlr.Touch.event.Cancel,
 ) void {
     const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_cancel", listener);
-    const wlr_seat = server.input_manager.defaultSeat().wlr_seat;
-
-    server.input_manager.handleActivity();
-
-    cursor.touch_points.clearRetainingCapacity();
-
-    while (wlr_seat.touch_state.touch_points.first()) |touch_point| {
-        wlr_seat.touchNotifyCancel(touch_point.client);
-    }
+    _ = cursor;
+    _ = event;
 }
 
-fn handleTouchFrame(_: *wl.Listener(void)) void {
-    server.input_manager.handleActivity();
-    server.input_manager.defaultSeat().wlr_seat.touchNotifyFrame();
+// TODO
+fn handleTouchFrame(listener: *wl.Listener(void)) void {
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("touch_frame", listener);
+    const seat = cursor.getSeat();
+
+    seat.wlr_seat.touchNotifyFrame();
 }
 
+// TODO
 fn handleTabletToolAxis(
-    _: *wl.Listener(*wlr.Tablet.event.Axis),
+    listener: *wl.Listener(*wlr.Tablet.event.Axis),
     event: *wlr.Tablet.event.Axis,
 ) void {
-    const device: *hwc.input.Device = @ptrFromInt(event.device.data);
-    const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
-
-    server.input_manager.handleActivity();
-
-    const tool = hwc.input.Tablet.Tool.get(
-        server.input_manager.defaultSeat().wlr_seat,
-        tablet,
-        event.tool,
-    ) catch return;
-
-    tool.axis(tablet, event);
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("tablet_tool_axis", listener);
+    _ = cursor;
+    _ = event;
 }
 
+// TODO
 fn handleTabletToolProximity(
-    _: *wl.Listener(*wlr.Tablet.event.Proximity),
+    listener: *wl.Listener(*wlr.Tablet.event.Proximity),
     event: *wlr.Tablet.event.Proximity,
 ) void {
-    const device: *hwc.input.Device = @ptrFromInt(event.device.data);
-    const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
-
-    server.input_manager.handleActivity();
-
-    const tool = hwc.input.Tablet.Tool.get(
-        server.input_manager.defaultSeat().wlr_seat,
-        tablet,
-        event.tool,
-    ) catch return;
-
-    tool.proximity(tablet, event);
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("tablet_tool_proximity", listener);
+    _ = cursor;
+    _ = event;
 }
+
+// TODO
 fn handleTabletToolTip(
-    _: *wl.Listener(*wlr.Tablet.event.Tip),
+    listener: *wl.Listener(*wlr.Tablet.event.Tip),
     event: *wlr.Tablet.event.Tip,
 ) void {
-    const device: *hwc.input.Device = @ptrFromInt(event.device.data);
-    const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
-
-    server.input_manager.handleActivity();
-
-    const tool = hwc.input.Tablet.Tool.get(
-        server.input_manager.defaultSeat().wlr_seat,
-        tablet,
-        event.tool,
-    ) catch return;
-
-    tool.tip(tablet, event);
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("tablet_tool_tip", listener);
+    _ = cursor;
+    _ = event;
 }
+
+// TODO
 fn handleTabletToolButton(
-    _: *wl.Listener(*wlr.Tablet.event.Button),
+    listener: *wl.Listener(*wlr.Tablet.event.Button),
     event: *wlr.Tablet.event.Button,
 ) void {
-    const device: *hwc.input.Device = @ptrFromInt(event.device.data);
-    const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
-
-    server.input_manager.handleActivity();
-
-    const tool = hwc.input.Tablet.Tool.get(
-        server.input_manager.defaultSeat().wlr_seat,
-        tablet,
-        event.tool,
-    ) catch return;
-
-    tool.button(tablet, event);
+    const cursor: *hwc.input.Cursor = @fieldParentPtr("tablet_tool_button", listener);
+    _ = cursor;
+    _ = event;
 }

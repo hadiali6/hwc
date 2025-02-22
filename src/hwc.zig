@@ -1,76 +1,71 @@
+const std = @import("std");
+const fmt = std.fmt;
+
 const wlr = @import("wlroots");
 
-pub const Config = @import("Config.zig");
-pub const Output = @import("Output.zig");
-pub const OutputManager = @import("OutputManager.zig");
+pub var server: Server = undefined;
+
 pub const Server = @import("Server.zig");
-pub const XdgDecoration = @import("Decoration.zig");
-pub const XdgPopup = @import("XdgPopup.zig");
-pub const XdgToplevel = @import("XdgToplevel.zig");
+pub const StatusManager = @import("StatusManager.zig");
 
-pub const Focusable = union(enum) {
-    none: void,
-    toplevel: *XdgToplevel,
-    // TODO:
-    // layersurface
-    // locksurface
-    // xwayland
+pub const desktop = struct {
+    pub const Focusable = union(enum) {
+        toplevel: *XdgToplevel,
+        layer_surface: *LayerSurface,
+        none,
 
-    pub fn wlrSurface(self: Focusable) ?*wlr.Surface {
-        return switch (self) {
-            .toplevel => |toplevel| toplevel.xdg_toplevel.base.surface,
-            .none => null,
-        };
-    }
-
-    pub fn wlrSceneNode(self: Focusable) ?*wlr.SceneNode {
-        return switch (self) {
-            .toplevel => |toplevel| sceneNodeFromSurface(toplevel.xdg_toplevel.base.surface),
-            .none => null,
-        };
-    }
-
-    pub fn fromNode(wlr_scene_node: *wlr.SceneNode) ?*Focusable {
-        var n = wlr_scene_node;
-        while (true) {
-            if (@as(?*Focusable, @ptrFromInt(n.data))) |focusable| {
-                return focusable;
-            }
-
-            if (n.parent) |parent_wlr_scene_tree| {
-                n = &parent_wlr_scene_tree.node;
-            } else {
-                return null;
-            }
+        pub fn wlrSurface(self: Focusable) ?*wlr.Surface {
+            return switch (self) {
+                .toplevel => |toplevel| toplevel.wlr_xdg_toplevel.base.surface,
+                .layer_surface => |layer_surface| layer_surface.wlr_layer_surface.surface,
+                .none => null,
+            };
         }
 
-        return null;
-    }
+        pub fn sceneDescriptor(self: Focusable) ?*SceneDescriptor {
+            return switch (self) {
+                .toplevel => |toplevel| SceneDescriptor.fromNode(
+                    &toplevel.surface_tree.node,
+                ),
 
-    pub fn fromSurface(wlr_surface: *wlr.Surface) ?*Focusable {
-        if (sceneNodeFromSurface(wlr_surface)) |wlr_scene_node| {
-            return fromNode(wlr_scene_node);
+                .layer_surface => |layer_surface| SceneDescriptor.fromNode(
+                    &layer_surface.wlr_scene_layer_surface.tree.node,
+                ),
+
+                .none => null,
+            };
         }
 
-        return null;
-    }
+        /// For logging purposes
+        pub fn status(self: Focusable, buffer: []u8) ![]const u8 {
+            return switch (self) {
+                .toplevel => |toplevel| fmt.bufPrint(buffer, " [app_id='{?s}' title='{?s}']", .{
+                    toplevel.wlr_xdg_toplevel.app_id,
+                    toplevel.wlr_xdg_toplevel.title,
+                }),
+                .layer_surface => |layer_surface| fmt.bufPrint(buffer, " [namespace='{s}']", .{
+                    layer_surface.wlr_layer_surface.namespace,
+                }),
+                .none => "",
+            };
+        }
+    };
 
-    fn sceneNodeFromSurface(wlr_surface: *wlr.Surface) ?*wlr.SceneNode {
-        return @as(?*wlr.SceneNode, @ptrFromInt(wlr_surface.getRootSurface().data));
-    }
+    pub const LayerSurface = @import("desktop/LayerSurface.zig");
+    pub const Output = @import("desktop/Output.zig");
+    pub const OutputManager = @import("desktop/OutputManager.zig");
+    pub const SceneDescriptor = @import("desktop/SceneDescriptor.zig");
+    pub const SurfaceManager = @import("desktop/SurfaceManager.zig");
+    pub const XdgPopup = @import("desktop/XdgPopup.zig");
+    pub const XdgToplevel = @import("desktop/XdgToplevel.zig");
 };
 
 pub const input = struct {
     pub const Cursor = @import("input/Cursor.zig");
     pub const Device = @import("input/Device.zig");
-    pub const Keybind = @import("input/Keybind.zig");
     pub const Keyboard = @import("input/Keyboard.zig");
-    pub const KeyboardGroup = @import("input/KeyboardGroup.zig");
-    pub const KeyboardShortcutsInhibitor = @import("input/KeyboardShortcutsInhibitor.zig");
     pub const Manager = @import("input/Manager.zig");
-    pub const PointerConstraint = @import("input/PointerConstraint.zig");
-    pub const Relay = @import("input/Relay.zig");
     pub const Seat = @import("input/Seat.zig");
-    pub const Switch = @import("input/Switch.zig");
-    pub const Tablet = @import("input/Tablet.zig");
+
+    pub const util = @import("input/util.zig");
 };

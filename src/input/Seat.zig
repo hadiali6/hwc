@@ -1,253 +1,143 @@
 const std = @import("std");
-const log = std.log.scoped(.seat);
+const log = std.log.scoped(.@"input.Seat");
+const meta = std.meta;
+const assert = std.debug.assert;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
-const xkb = @import("xkbcommon");
 
-const hwc = @import("../hwc.zig");
-const util = @import("../util.zig");
-
-const server = &@import("root").server;
+const hwc = @import("hwc");
+const server = &hwc.server;
 
 wlr_seat: *wlr.Seat,
 cursor: hwc.input.Cursor,
-relay: hwc.input.Relay,
+focused: hwc.desktop.Focusable = .none,
+focused_output: ?*hwc.desktop.Output = null,
 
-focused: hwc.Focusable = .none,
+destroy: wl.Listener(*wlr.Seat) = wl.Listener(*wlr.Seat).init(handleDestroy),
 
-keyboard_groups: wl.list.Head(hwc.input.KeyboardGroup, .link),
-
-/// Timer for repeating keyboard mappings
-keybind_repeat_timer: *wl.EventSource,
-
-/// Currently repeating mapping, if any
-repeating_keybind: ?*const hwc.input.Keybind = null,
-
-link: wl.list.Link,
+focused_output_destroy: wl.Listener(*wlr.Output) =
+    wl.Listener(*wlr.Output).init(handleFocusedOutputDestroy),
+focused_scene_descriptor_destroy: wl.Listener(void) =
+    wl.Listener(void).init(handleFocusedSceneDescriptorDestroy),
 
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) =
     wl.Listener(*wlr.Seat.event.RequestSetCursor).init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) =
     wl.Listener(*wlr.Seat.event.RequestSetSelection).init(handleRequestSetSelection),
+request_set_primary_selection: wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection) =
+    wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection).init(handleRequestSetPrimarySelection),
+
+request_start_drag: wl.Listener(*wlr.Seat.event.RequestStartDrag) =
+    wl.Listener(*wlr.Seat.event.RequestStartDrag).init(handleRequestStartDrag),
+start_drag: wl.Listener(*wlr.Drag) = wl.Listener(*wlr.Drag).init(handleStartDrag),
+drag_destroy: wl.Listener(*wlr.Drag) = wl.Listener(*wlr.Drag).init(handleDragDestroy),
 
 pub fn init(self: *hwc.input.Seat, name: [*:0]const u8) !void {
-    const event_loop = server.wl_server.getEventLoop();
-    const keybind_repeat_timer = try event_loop.addTimer(
-        *hwc.input.Seat,
-        handleMappingRepeatTimeout,
-        self,
-    );
-    errdefer keybind_repeat_timer.remove();
-    _ = name;
-
     self.* = .{
-        .keybind_repeat_timer = keybind_repeat_timer,
-        .wlr_seat = try wlr.Seat.create(server.wl_server, "default"),
+        .wlr_seat = try wlr.Seat.create(server.wl_server, name),
         .cursor = undefined,
-        .relay = undefined,
-        .keyboard_groups = undefined,
-
-        .link = undefined,
     };
 
     self.wlr_seat.data = @intFromPtr(self);
 
     try self.cursor.init();
-    self.relay.init();
-    self.keyboard_groups.init();
 
+    self.wlr_seat.events.destroy.add(&self.destroy);
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
-    self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);
+    self.wlr_seat.events.request_set_primary_selection.add(&self.request_set_primary_selection);
+    self.wlr_seat.events.request_start_drag.add(&self.request_start_drag);
+    self.wlr_seat.events.start_drag.add(&self.start_drag);
+
+    log.info("{s}: name='{s}'", .{ @src().fn_name, name });
 }
 
-pub fn deinit(self: *hwc.input.Seat) void {
-    while (self.keyboard_groups.first()) |keyboard_group| {
-        keyboard_group.deinit();
-    }
-    self.keybind_repeat_timer.remove();
-    self.cursor.deinit();
-    self.link.remove();
-    util.allocator.destroy(self);
-}
-
-pub fn focus(self: *hwc.input.Seat, target: hwc.Focusable) void {
-    if (std.meta.eql(self.focused, target)) {
+pub fn focus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
+    if (meta.eql(self.focused, target)) {
         return;
     }
 
+    self.cleanupFocus();
+    self.rawFocus(target);
+}
+
+fn cleanupFocus(self: *hwc.input.Seat) void {
     switch (self.focused) {
         .toplevel => |toplevel| {
-            _ = toplevel.xdg_toplevel.setActivated(false);
+            _ = toplevel.wlr_xdg_toplevel.setActivated(false);
             toplevel.destroyPopups();
         },
+        .layer_surface => |layer_surface| {
+            // TODO
+            _ = layer_surface;
+        },
         .none => {},
+    }
+
+    if (self.focused != .none) {
+        self.focused_scene_descriptor_destroy.link.remove();
+    }
+}
+
+fn rawFocus(self: *hwc.input.Seat, target: hwc.desktop.Focusable) void {
+    {
+        var focused_buffer: [1024]u8 = undefined;
+        var target_buffer: [1024]u8 = undefined;
+
+        log.debug("{s}: {s}{!s} -> {s}{!s}", .{
+            @src().fn_name,
+            @tagName(self.focused),
+            self.focused.status(&focused_buffer),
+            @tagName(target),
+            target.status(&target_buffer),
+        });
     }
 
     self.focused = target;
 
     switch (target) {
         .toplevel => |toplevel| {
-            toplevel.scene_tree.node.raiseToTop();
-
-            // move to top of stack aka first in list
-            toplevel.link.remove();
-            server.mapped_toplevels.prepend(toplevel);
-
-            _ = toplevel.xdg_toplevel.setActivated(true);
+            toplevel.surface_tree.node.raiseToTop();
+            _ = toplevel.wlr_xdg_toplevel.setActivated(true);
+        },
+        .layer_surface => |layer_surface| {
+            // TODO
+            _ = layer_surface;
         },
         .none => {
             self.wlr_seat.keyboardClearFocus();
         },
     }
 
-    const target_wlr_surface = target.wlrSurface();
+    if (target.sceneDescriptor()) |scene_descriptor| {
+        scene_descriptor.wlr_scene_node.events.destroy.add(&self.focused_scene_descriptor_destroy);
+    }
 
-    self.relay.focus(target_wlr_surface);
+    if (target.wlrSurface()) |wlr_surface| {
+        self.keyboardNotifyEnter(wlr_surface);
+    }
+}
 
-    if (target_wlr_surface == null) {
+pub fn focusOutput(self: *hwc.input.Seat, output: *hwc.desktop.Output) void {
+    if (self.focused_output == output) {
         return;
     }
 
-    self.keyboardNotifyEnter(target_wlr_surface.?);
-
-    var iterator = server.input_manager.devices.iterator(.forward);
-    while (iterator.next()) |input_device| {
-        const wlr_input_device = input_device.wlr_input_device;
-
-        if (wlr_input_device.type == .tablet_pad) {
-            const wlr_tablet_pad = wlr_input_device.toTabletPad();
-
-            if (@as(
-                ?*hwc.input.Tablet.Pad,
-                @alignCast(@ptrCast(wlr_tablet_pad.data)),
-            )) |tablet_pad| {
-                tablet_pad.setFocusedSurface(target_wlr_surface.?);
-            }
-        }
-    }
-}
-
-fn handleRequestSetCursor(
-    listener: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
-    event: *wlr.Seat.event.RequestSetCursor,
-) void {
-    const seat: *hwc.input.Seat = @fieldParentPtr("request_set_cursor", listener);
-    if (event.seat_client == seat.wlr_seat.pointer_state.focused_client) {
-        seat.cursor.wlr_cursor.setSurface(
-            event.surface,
-            event.hotspot_x,
-            event.hotspot_y,
-        );
-    }
-}
-
-fn handleRequestSetSelection(
-    listener: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
-    event: *wlr.Seat.event.RequestSetSelection,
-) void {
-    const seat: *hwc.input.Seat = @fieldParentPtr("request_set_selection", listener);
-    seat.wlr_seat.setSelection(event.source, event.serial);
-}
-
-fn handleMappingRepeatTimeout(self: *hwc.input.Seat) c_int {
-    if (self.repeating_keybind) |keybind| {
-        const rate = server.config.keyboard_repeat_rate;
-        const ms_delay = if (rate > 0) 1000 / rate else 0;
-        self.keybind_repeat_timer.timerUpdate(ms_delay) catch {
-            log.err("failed to update mapping repeat timer", .{});
-        };
-        keybind.runLuaCallback() catch {
-            log.err("repeating keybind lua function failed", .{});
-        };
-    }
-    return 0;
-}
-
-pub fn clearRepeatingMapping(self: *hwc.input.Seat) void {
-    self.keybind_repeat_timer.timerUpdate(0) catch {
-        log.err("failed to clear mapping repeat timer", .{});
-    };
-    self.repeating_keybind = null;
-}
-
-/// Handle any user-defined mapping for passed keycode, modifiers and keyboard state
-/// Returns true if a mapping was run
-pub fn handleKeybind(
-    self: *hwc.input.Seat,
-    keycode: xkb.Keycode,
-    modifiers: wlr.Keyboard.ModifierMask,
-    released: bool,
-    xkb_state: *xkb.State,
-) bool {
-    // It is possible for more than one mapping to be matched due to the
-    // existence of layout-independent mappings. It is also possible due to
-    // translation by xkbcommon consuming modifiers. On the swedish layout
-    // for example, translating Super+Shift+Space may consume the Shift
-    // modifier and confict with a mapping for Super+Space. For this reason,
-    // matching wihout xkbcommon translation is done first and after a match
-    // has been found all further matches are ignored.
-    var found: ?*hwc.input.Keybind = null;
-
-    // First check for matches without translating keysyms with xkbcommon.
-    // That is, if the physical keys Mod+Shift+1 are pressed on a US layout don't
-    // translate the keysym 1 to an exclamation mark. This behavior is generally
-    // what is desired.
-    for (server.config.keybinds.items) |*keybind| {
-        if (keybind.match(keycode, modifiers, released, xkb_state, .no_translate)) {
-            if (found == null) {
-                found = keybind;
-            } else {
-                log.debug("already found a matching mapping, ignoring additional match", .{});
-            }
-        }
+    if (self.focused_output) |focused_output| {
+        assert(focused_output.wlr_output != output.wlr_output);
+        self.focused_output_destroy.link.remove();
     }
 
-    // There are however some cases where it is necessary to translate keysyms
-    // with xkbcommon for intuitive behavior. For example, layouts may require
-    // translation with the numlock modifier to obtain keypad number keysyms
-    // (e.g. KP_1).
-    for (server.config.keybinds.items) |*keybind| {
-        if (keybind.match(keycode, modifiers, released, xkb_state, .translate)) {
-            if (found == null) {
-                found = keybind;
-            } else {
-                log.debug("already found a matching mapping, ignoring additional match", .{});
-            }
-        }
-    }
+    log.debug("{s}: '{?s}' -> '{s}'", .{
+        @src().fn_name,
+        if (self.focused_output) |focused_output| focused_output.wlr_output.name else null,
+        output.wlr_output.name,
+    });
 
-    // The mapped command must be run outside of the loop above as it may modify
-    // the list of mappings we are iterating through, possibly causing it to be re-allocated.
-    if (found) |keybind| {
-        if (keybind.repeat) {
-            self.repeating_keybind = keybind;
-            self.keybind_repeat_timer.timerUpdate(server.config.keyboard_repeat_delay) catch {
-                log.err("failed to update mapping repeat timer", .{});
-            };
-        }
-        keybind.runLuaCallback() catch return false;
-        return true;
-    }
+    output.wlr_output.events.destroy.add(&self.focused_output_destroy);
 
-    return false;
-}
-
-pub fn updateCapabilities(self: *hwc.input.Seat) void {
-    var capabilities = wl.Seat.Capability{};
-
-    var iterator = server.input_manager.devices.iterator(.forward);
-    while (iterator.next()) |device| {
-        switch (device.wlr_input_device.type) {
-            .keyboard => capabilities.keyboard = true,
-            .pointer => capabilities.pointer = true,
-            .touch => capabilities.touch = true,
-            .tablet_pad, .tablet, .@"switch" => {},
-        }
-    }
-
-    self.wlr_seat.setCapabilities(capabilities);
+    self.focused_output = output;
 }
 
 pub fn keyboardNotifyEnter(self: *hwc.input.Seat, wlr_surface: *wlr.Surface) void {
@@ -260,4 +150,113 @@ pub fn keyboardNotifyEnter(self: *hwc.input.Seat, wlr_surface: *wlr.Surface) voi
     } else {
         self.wlr_seat.keyboardNotifyEnter(wlr_surface, &.{}, null);
     }
+}
+
+pub fn updateCapabilities(self: *hwc.input.Seat) void {
+    var capabilities = wl.Seat.Capability{};
+
+    var it = server.input_manager.devices.iterator(.forward);
+    while (it.next()) |device| {
+        switch (device.wlr_input_device.type) {
+            .keyboard => capabilities.keyboard = true,
+            .pointer => capabilities.pointer = true,
+            .touch => capabilities.touch = true,
+            .tablet_pad, .tablet, .@"switch" => {},
+        }
+    }
+
+    self.wlr_seat.setCapabilities(capabilities);
+
+    log.info("{s}: name='{s}': keyboard={} pointer={} touch={}", .{
+        @src().fn_name,
+        self.wlr_seat.name,
+        capabilities.keyboard,
+        capabilities.pointer,
+        capabilities.touch,
+    });
+}
+
+fn handleDestroy(listener: *wl.Listener(*wlr.Seat), wlr_seat: *wlr.Seat) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("destroy", listener);
+
+    seat.cursor.deinit();
+
+    seat.destroy.link.remove();
+    seat.request_set_cursor.link.remove();
+    seat.request_set_primary_selection.link.remove();
+    seat.request_start_drag.link.remove();
+    seat.start_drag.link.remove();
+
+    log.info("{s}: name='{s}'", .{ @src().fn_name, wlr_seat.name });
+}
+
+fn handleFocusedOutputDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("focused_output_destroy", listener);
+    seat.focused_output = null;
+}
+
+fn handleFocusedSceneDescriptorDestroy(listener: *wl.Listener(void)) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("focused_scene_descriptor_destroy", listener);
+    seat.rawFocus(.none);
+}
+
+fn handleRequestSetCursor(
+    listener: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
+    event: *wlr.Seat.event.RequestSetCursor,
+) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("request_set_cursor", listener);
+
+    if (seat.wlr_seat.pointer_state.focused_client == event.seat_client) {
+        log.info("{s}: {*}", .{ @src().fn_name, event.seat_client });
+
+        seat.cursor.wlr_cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
+    }
+}
+
+fn handleRequestSetSelection(
+    listener: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
+    event: *wlr.Seat.event.RequestSetSelection,
+) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("request_set_selection", listener);
+
+    seat.wlr_seat.setSelection(event.source, event.serial);
+}
+
+fn handleRequestSetPrimarySelection(
+    listener: *wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection),
+    event: *wlr.Seat.event.RequestSetPrimarySelection,
+) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("request_set_primary_selection", listener);
+
+    seat.wlr_seat.setPrimarySelection(event.source, event.serial);
+}
+
+// TODO
+fn handleRequestStartDrag(
+    listener: *wl.Listener(*wlr.Seat.event.RequestStartDrag),
+    event: *wlr.Seat.event.RequestStartDrag,
+) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("request_start_drag", listener);
+    _ = seat;
+    _ = event;
+}
+
+// TODO
+fn handleStartDrag(
+    listener: *wl.Listener(*wlr.Drag),
+    wlr_drag: *wlr.Drag,
+) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("start_drag", listener);
+    _ = seat;
+    _ = wlr_drag;
+}
+
+// TODO
+fn handleDragDestroy(
+    listener: *wl.Listener(*wlr.Drag),
+    wlr_drag: *wlr.Drag,
+) void {
+    const seat: *hwc.input.Seat = @fieldParentPtr("drag_destroy", listener);
+    _ = seat;
+    _ = wlr_drag;
 }

@@ -1,245 +1,296 @@
 const std = @import("std");
-const log = std.log.scoped(.server);
+const log = std.log.scoped(.Server);
+const assert = std.debug.assert;
+const mem = std.mem;
+const posix = std.posix;
 
+const libc = @cImport({
+    @cInclude("stdlib.h");
+});
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
-const xkb = @import("xkbcommon");
 
-const hwc = @import("hwc.zig");
-const c = @import("c.zig");
+const hwc = @import("hwc");
+
+mem_allocator: mem.Allocator,
 
 wl_server: *wl.Server,
-backend: *wlr.Backend,
-session: ?*wlr.Session,
-renderer: *wlr.Renderer,
-allocator: *wlr.Allocator,
-compositor: *wlr.Compositor,
-subcompositor: *wlr.Subcompositor,
-scene: *wlr.Scene,
-hidden: *wlr.SceneTree,
+
+sig_interrupt_source: *wl.EventSource,
+sig_terminate_source: *wl.EventSource,
+
+wlr_backend: *wlr.Backend,
+wlr_session: ?*wlr.Session,
+
+wlr_renderer: *wlr.Renderer,
+wlr_allocator: *wlr.Allocator,
+wlr_shm: *wlr.Shm,
 
 renderer_lost: wl.Listener(void) = wl.Listener(void).init(handleRendererLost),
 
-shm: *wlr.Shm,
-drm: ?*wlr.Drm = null,
-linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
+wlr_drm: ?*wlr.Drm = null,
+wlr_linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
 
-output_layout: *wlr.OutputLayout,
-scene_output_layout: *wlr.SceneOutputLayout,
-new_output: wl.Listener(*wlr.Output) =
-    wl.Listener(*wlr.Output).init(handleNewOutput),
-all_outputs: wl.list.Head(hwc.Output, .link),
+wlr_compositor: *wlr.Compositor,
+wlr_subcompositor: *wlr.Subcompositor,
+wlr_data_device_manager: *wlr.DataDeviceManager,
 
-xdg_shell: *wlr.XdgShell,
-new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) =
-    wl.Listener(*wlr.XdgToplevel).init(handleNewXdgToplevel),
-mapped_toplevels: wl.list.Head(hwc.XdgToplevel, .link),
+wlr_alpha_modifier: *wlr.AlphaModifierV1,
+wlr_content_type_manager: *wlr.ContentTypeManagerV1,
+wlr_data_control_manager: *wlr.DataControlManagerV1,
+wlr_export_dmabuf_manager: *wlr.ExportDmabufManagerV1,
+wlr_fractional_scale_manager: *wlr.FractionalScaleManagerV1,
+wlr_primary_selection_device_manager: *wlr.PrimarySelectionDeviceManagerV1,
+wlr_screencopy_manager: *wlr.ScreencopyManagerV1,
+wlr_security_context_manager: *wlr.SecurityContextManagerV1,
+wlr_single_pixel_buffer_manager: *wlr.SinglePixelBufferManagerV1,
+wlr_viewporter: *wlr.Viewporter,
 
-xdg_decoration_manager: *wlr.XdgDecorationManagerV1,
-new_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) =
-    wl.Listener(*wlr.XdgToplevelDecorationV1).init(handleNewToplevelDecoration),
-
-config: hwc.Config,
-output_manager: hwc.OutputManager,
+output_manager: hwc.desktop.OutputManager,
+surface_manager: hwc.desktop.SurfaceManager,
 input_manager: hwc.input.Manager,
+status_manager: hwc.StatusManager,
 
-security_context_manager: *wlr.SecurityContextManagerV1,
-single_pixel_buffer_manager: *wlr.SinglePixelBufferManagerV1,
-viewporter: *wlr.Viewporter,
-fractional_scale_manager: *wlr.FractionalScaleManagerV1,
-data_device_manager: *wlr.DataDeviceManager,
-primary_selection_manager: *wlr.PrimarySelectionDeviceManagerV1,
-data_control_manager: *wlr.DataControlManagerV1,
-export_dmabuf_manager: *wlr.ExportDmabufManagerV1,
-screencopy_manager: *wlr.ScreencopyManagerV1,
-xdg_output_manager: *wlr.XdgOutputManagerV1,
-presentation: *wlr.Presentation,
-
-pub fn init(self: *hwc.Server) !void {
+pub fn init(self: *hwc.Server, allocator: mem.Allocator) !void {
     const wl_server = try wl.Server.create();
-    const event_loop = wl_server.getEventLoop();
-    var session: ?*wlr.Session = undefined;
-    const backend = try wlr.Backend.autocreate(event_loop, &session);
-    const renderer = try wlr.Renderer.autocreate(backend);
-    const output_layout = try wlr.OutputLayout.create(wl_server);
-    const scene = try wlr.Scene.create();
-    const hidden_scene_tree = try scene.tree.createSceneTree();
-    hidden_scene_tree.node.setEnabled(false);
+    const wl_event_loop = wl_server.getEventLoop();
+
+    var wlr_session: ?*wlr.Session = undefined;
+    const wlr_backend = try wlr.Backend.autocreate(wl_event_loop, &wlr_session);
+
+    const wlr_renderer = try wlr.Renderer.autocreate(wlr_backend);
 
     self.* = .{
+        .mem_allocator = allocator,
         .wl_server = wl_server,
-        .backend = backend,
-        .session = session,
-        .renderer = renderer,
-        .allocator = try wlr.Allocator.autocreate(backend, renderer),
-        .compositor = try wlr.Compositor.create(self.wl_server, 6, self.renderer),
-        .subcompositor = try wlr.Subcompositor.create(self.wl_server),
-        .shm = try wlr.Shm.createWithRenderer(wl_server, 1, renderer),
-        .scene = scene,
-        .output_layout = output_layout,
-        .scene_output_layout = try scene.attachOutputLayout(output_layout),
+
+        .sig_interrupt_source = try wl_event_loop.addSignal(
+            *wl.Server,
+            posix.SIG.INT,
+            handleDestroySingals,
+            wl_server,
+        ),
+        .sig_terminate_source = try wl_event_loop.addSignal(
+            *wl.Server,
+            posix.SIG.TERM,
+            handleDestroySingals,
+            wl_server,
+        ),
+
+        .wlr_backend = wlr_backend,
+        .wlr_session = wlr_session,
+
+        .wlr_renderer = wlr_renderer,
+        .wlr_allocator = try wlr.Allocator.autocreate(wlr_backend, wlr_renderer),
+        .wlr_shm = try wlr.Shm.createWithRenderer(wl_server, 2, wlr_renderer),
+
+        .wlr_compositor = try wlr.Compositor.create(wl_server, 6, wlr_renderer),
+        .wlr_subcompositor = try wlr.Subcompositor.create(wl_server),
+        .wlr_data_device_manager = try wlr.DataDeviceManager.create(wl_server),
+
+        .wlr_alpha_modifier = try wlr.AlphaModifierV1.create(wl_server),
+        .wlr_data_control_manager = try wlr.DataControlManagerV1.create(wl_server),
+        .wlr_export_dmabuf_manager = try wlr.ExportDmabufManagerV1.create(wl_server),
+        .wlr_fractional_scale_manager = try wlr.FractionalScaleManagerV1.create(wl_server, 1),
+        .wlr_primary_selection_device_manager = try wlr.PrimarySelectionDeviceManagerV1.create(wl_server),
+        .wlr_screencopy_manager = try wlr.ScreencopyManagerV1.create(wl_server),
+        .wlr_security_context_manager = try wlr.SecurityContextManagerV1.create(wl_server),
+        .wlr_single_pixel_buffer_manager = try wlr.SinglePixelBufferManagerV1.create(wl_server),
+        .wlr_viewporter = try wlr.Viewporter.create(wl_server),
+        .wlr_content_type_manager = try wlr.ContentTypeManagerV1.create(wl_server, 1),
+
         .output_manager = undefined,
-        .all_outputs = undefined,
-        .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
-        .mapped_toplevels = undefined,
-        .xdg_decoration_manager = try wlr.XdgDecorationManagerV1.create(wl_server),
-        .config = undefined,
+        .surface_manager = undefined,
         .input_manager = undefined,
-        .security_context_manager = try wlr.SecurityContextManagerV1.create(wl_server),
-        .single_pixel_buffer_manager = try wlr.SinglePixelBufferManagerV1.create(wl_server),
-        .viewporter = try wlr.Viewporter.create(wl_server),
-        .fractional_scale_manager = try wlr.FractionalScaleManagerV1.create(wl_server, 1),
-        .data_device_manager = try wlr.DataDeviceManager.create(wl_server),
-        .primary_selection_manager = try wlr.PrimarySelectionDeviceManagerV1.create(wl_server),
-        .data_control_manager = try wlr.DataControlManagerV1.create(wl_server),
-        .export_dmabuf_manager = try wlr.ExportDmabufManagerV1.create(wl_server),
-        .screencopy_manager = try wlr.ScreencopyManagerV1.create(wl_server),
-        .xdg_output_manager = try wlr.XdgOutputManagerV1.create(wl_server, output_layout),
-        .presentation = try wlr.Presentation.create(wl_server, backend),
-        .hidden = hidden_scene_tree,
+        .status_manager = undefined,
     };
 
-    if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
-        self.drm = try wlr.Drm.create(wl_server, renderer);
-        self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 4, renderer);
+    try self.surface_manager.init();
+
+    if (wlr_renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
+        // TODO: remove because wl_drm is a legacy interface
+        self.wlr_drm = try wlr.Drm.create(wl_server, wlr_renderer);
+        self.wlr_linux_dmabuf =
+            try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, wlr_renderer);
+        self.surface_manager.wlr_scene.setLinuxDmabufV1(self.wlr_linux_dmabuf.?);
     }
 
-    self.all_outputs.init();
-
-    self.renderer.events.lost.add(&self.renderer_lost);
-    self.backend.events.new_output.add(&self.new_output);
-
-    self.xdg_shell.events.new_toplevel.add(&self.new_xdg_toplevel);
-    self.mapped_toplevels.init();
-
-    self.xdg_decoration_manager.events.new_toplevel_decoration.add(&self.new_toplevel_decoration);
-
-    try self.config.init();
     try self.output_manager.init();
     try self.input_manager.init();
+    try self.status_manager.init();
+
+    wlr_renderer.events.lost.add(&self.renderer_lost);
+
+    wl_server.setGlobalFilter(*hwc.Server, handleGlobalFilter, self);
+
+    log.info("{s}", .{@src().fn_name});
 }
 
 pub fn deinit(self: *hwc.Server) void {
-    self.new_xdg_toplevel.link.remove();
-    self.new_toplevel_decoration.link.remove();
+    self.sig_interrupt_source.remove();
+    self.sig_terminate_source.remove();
+
+    self.renderer_lost.link.remove();
 
     self.wl_server.destroyClients();
 
-    self.backend.destroy();
-
-    self.renderer.destroy();
-    self.allocator.destroy();
-
     self.input_manager.deinit();
+    self.output_manager.deinit();
+
+    self.wlr_backend.destroy();
+
+    assert(self.output_manager.outputs.empty());
+
+    self.surface_manager.deinit();
+    self.wlr_renderer.destroy();
+    self.wlr_allocator.destroy();
 
     self.wl_server.destroy();
+
+    log.info("{s}", .{@src().fn_name});
+}
+
+pub fn startSocket(self: *hwc.Server) !void {
+    var buffer: [11]u8 = undefined;
+    const socket = try self.wl_server.addSocketAuto(&buffer);
+
+    if (libc.setenv("WAYLAND_DISPLAY", socket.ptr, 1) < 0) {
+        return error.SetenvFailed;
+    }
+
+    log.info("{s}: set WAYLAND_DISPLAY={s}", .{ @src().fn_name, socket });
 }
 
 pub fn start(self: *hwc.Server) !void {
-    var buf: [11]u8 = undefined;
-    const socket = try self.wl_server.addSocketAuto(&buf);
-    try self.backend.start();
-    log.info("Setting WAYLAND_DISPLAY to {s}", .{socket});
-    if (c.setenv("WAYLAND_DISPLAY", socket.ptr, 1) < 0) {
-        return error.SetenvError;
+    try self.wlr_backend.start();
+    self.wl_server.run();
+}
+
+fn handleGlobalFilter(
+    wl_client: *const wl.Client,
+    wl_global: *const wl.Global,
+    server: *hwc.Server,
+) bool {
+    if (server.wlr_security_context_manager.lookupClient(wl_client)) |wlr_security_context_state| {
+        const allowed = server.isAllowed(wl_global);
+        const blocked = server.isBlocked(wl_global);
+
+        log.debug(
+            "{s}: global='{s}' allowed='{}' sandbox_engine='{?s}' app_id='{?s}' instance_id='{?s}'",
+            .{
+                @src().fn_name,
+                wl_global.getInterface().name,
+                allowed,
+                wlr_security_context_state.app_id,
+                wlr_security_context_state.app_id,
+                wlr_security_context_state.instance_id,
+            },
+        );
+
+        assert(blocked != allowed);
+
+        return allowed;
     }
+
+    log.debug(
+        "{s}: global='{s}' allowed='true'",
+        .{ @src().fn_name, wl_global.getInterface().name },
+    );
+    return true;
 }
 
-const AtResult = struct {
-    wlr_scene_node: *wlr.SceneNode,
-    wlr_surface: ?*wlr.Surface,
-    sx: f64,
-    sy: f64,
-};
+fn isAllowed(self: *hwc.Server, wl_global: *const wl.Global) bool {
+    if (self.wlr_drm) |wlr_drm| {
+        return wl_global == wlr_drm.global;
+    }
 
-pub fn resultAt(self: *hwc.Server, lx: f64, ly: f64) ?AtResult {
-    var sx: f64 = undefined;
-    var sy: f64 = undefined;
-    const wlr_scene_node = self.scene.tree.node.at(lx, ly, &sx, &sy) orelse return null;
+    if (self.wlr_linux_dmabuf) |wlr_linux_dmabuf| {
+        return wl_global == wlr_linux_dmabuf.global;
+    }
 
-    const wlr_surface: ?*wlr.Surface = blk: {
-        if (wlr_scene_node.type == .buffer) {
-            const wlr_scene_buffer = wlr.SceneBuffer.fromNode(wlr_scene_node);
-
-            if (wlr.SceneSurface.tryFromBuffer(wlr_scene_buffer)) |wlr_scene_surface| {
-                break :blk wlr_scene_surface.surface;
-            }
-        }
-
-        break :blk null;
-    };
-
-    return .{
-        .wlr_scene_node = wlr_scene_node,
-        .wlr_surface = wlr_surface,
-        .sx = sx,
-        .sy = sy,
-    };
+    return mem.orderZ(u8, wl_global.getInterface().name, "wl_output") == .eq or
+        mem.orderZ(u8, wl_global.getInterface().name, "wl_seat") == .eq or
+        wl_global == self.input_manager.wlr_pointer_gestures.global or
+        wl_global == self.input_manager.wlr_relative_pointer_manager.global or
+        wl_global == self.output_manager.wlr_presentation.global or
+        wl_global == self.output_manager.wlr_xdg_output_manager.global or
+        wl_global == self.surface_manager.wlr_xdg_shell.global or
+        wl_global == self.wlr_alpha_modifier.global or
+        wl_global == self.wlr_compositor.global or
+        wl_global == self.wlr_content_type_manager.global or
+        wl_global == self.wlr_data_device_manager.global or
+        wl_global == self.wlr_fractional_scale_manager.global or
+        wl_global == self.wlr_primary_selection_device_manager.global or
+        wl_global == self.wlr_shm.global or
+        wl_global == self.wlr_single_pixel_buffer_manager.global or
+        wl_global == self.wlr_subcompositor.global or
+        wl_global == self.wlr_viewporter.global;
 }
 
-fn handleNewOutput(
-    listener: *wl.Listener(*wlr.Output),
-    wlr_output: *wlr.Output,
-) void {
-    const server: *hwc.Server = @fieldParentPtr("new_output", listener);
-
-    hwc.Output.create(wlr_output) catch |err| {
-        log.err("failed to allocate new output {}", .{err});
-        wlr_output.destroy();
-        return;
-    };
-
-    server.output_manager.addOutput();
+fn isBlocked(self: *hwc.Server, wl_global: *const wl.Global) bool {
+    return wl_global == self.output_manager.wlr_gamma_control_manager.global or
+        wl_global == self.output_manager.wlr_output_manager.global or
+        wl_global == self.output_manager.wlr_output_power_manager.global or
+        wl_global == self.status_manager.global or
+        wl_global == self.surface_manager.wlr_foreign_toplevel_manager.global or
+        wl_global == self.surface_manager.wlr_layer_shell.global or
+        wl_global == self.wlr_data_control_manager.global or
+        wl_global == self.wlr_export_dmabuf_manager.global or
+        wl_global == self.wlr_screencopy_manager.global or
+        wl_global == self.wlr_security_context_manager.global;
 }
 
-fn handleNewXdgToplevel(
-    _: *wl.Listener(*wlr.XdgToplevel),
-    xdg_toplevel: *wlr.XdgToplevel,
-) void {
-    hwc.XdgToplevel.create(xdg_toplevel) catch {
-        log.err("out of memory", .{});
-        xdg_toplevel.resource.postNoMemory();
-        return;
-    };
-}
+/// Handle SIGINT and SIGTERM by gracefully stopping the server
+fn handleDestroySingals(signal: c_int, wl_server: *wl.Server) c_int {
+    switch (signal) {
+        posix.SIG.INT => log.info("{s}: handling SIGINT", .{@src().fn_name}),
+        posix.SIG.TERM => log.info("{s}: handling SIGTERM", .{@src().fn_name}),
+        else => unreachable,
+    }
 
-fn handleNewToplevelDecoration(
-    _: *wl.Listener(*wlr.XdgToplevelDecorationV1),
-    wlr_xdg_decoration: *wlr.XdgToplevelDecorationV1,
-) void {
-    hwc.XdgDecoration.init(wlr_xdg_decoration);
+    wl_server.terminate();
+
+    return 0;
 }
 
 fn handleRendererLost(listener: *wl.Listener(void)) void {
     const server: *hwc.Server = @fieldParentPtr("renderer_lost", listener);
 
-    const new_renderer = wlr.Renderer.autocreate(server.backend) catch {
-        log.err("failed to create new renderer after GPU reset", .{});
+    const new_renderer = wlr.Renderer.autocreate(server.wlr_backend) catch |err| {
+        log.err(
+            "{s}: '{}': failed to create new renderer after GPU reset",
+            .{ @src().fn_name, err },
+        );
         return;
     };
 
-    const new_allocator = wlr.Allocator.autocreate(server.backend, server.renderer) catch {
+    const new_allocator = wlr.Allocator.autocreate(
+        server.wlr_backend,
+        server.wlr_renderer,
+    ) catch |err| {
         new_renderer.destroy();
-        log.err("failed to create new allocator after GPU reset", .{});
+        log.err(
+            "{s}: '{}': failed to create new allocator after GPU reset",
+            .{ @src().fn_name, err },
+        );
         return;
     };
 
     server.renderer_lost.link.remove();
     new_renderer.events.lost.add(&server.renderer_lost);
 
-    server.compositor.setRenderer(new_renderer);
-
+    server.wlr_compositor.setRenderer(new_renderer);
     {
-        var iterator = server.all_outputs.iterator(.forward);
-        while (iterator.next()) |output| {
+        var it = server.output_manager.outputs.iterator(.forward);
+        while (it.next()) |output| {
             _ = output.wlr_output.initRender(new_allocator, new_renderer);
         }
     }
 
-    server.renderer.destroy();
-    server.renderer = new_renderer;
+    server.wlr_renderer.destroy();
+    server.wlr_renderer = new_renderer;
 
-    server.allocator.destroy();
-    server.allocator = new_allocator;
+    server.wlr_allocator.destroy();
+    server.wlr_allocator = new_allocator;
 }

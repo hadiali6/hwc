@@ -10,7 +10,6 @@ Go use a good compositor like [hyprland](https://github.com/hyprwm/Hyprland), [s
 **Install the following dependencies:**
 
 - [zig](https://ziglang.org/download/) 0.13
-- lua (5.1, 5.2, 5.3, 5.4, LuaJIT)
 - wayland
 - wayland-protocols
 - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) 0.18

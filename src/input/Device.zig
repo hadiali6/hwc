@@ -1,132 +1,130 @@
 const std = @import("std");
-const builtin = @import("builtin");
-const log = std.log.scoped(.input_manager);
+const log = std.log.scoped(.@"input.Device");
 const assert = std.debug.assert;
+const ascii = std.ascii;
+const fmt = std.fmt;
+const mem = std.mem;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const libinput = @import("libinput");
 
-const hwc = @import("../hwc.zig");
-const util = @import("../util.zig");
+const hwc = @import("hwc");
+const server = &hwc.server;
 
-const server = &@import("root").server;
+const InternalDevice = union(wlr.InputDevice.Type) {
+    keyboard: hwc.input.Keyboard,
+    pointer,
+    touch,
+    tablet,
+    tablet_pad,
+    @"switch",
 
-wlr_input_device: *wlr.InputDevice,
+    fn init(self: *InternalDevice, wlr_input_device: *wlr.InputDevice) !void {
+        switch (wlr_input_device.type) {
+            .keyboard => {
+                self.* = .{ .keyboard = undefined };
+                try self.keyboard.init(wlr_input_device.toKeyboard());
+            },
+            .pointer, .touch => {
+                self.* = if (wlr_input_device.type == .pointer) .pointer else .touch;
 
-/// InputManager.devices
+                const seat = server.input_manager.default_seat;
+                seat.cursor.wlr_cursor.attachInputDevice(wlr_input_device);
+            },
+            .tablet, .tablet_pad, .@"switch" => {},
+        }
+    }
+
+    fn deinit(self: InternalDevice, wlr_input_device: *wlr.InputDevice) void {
+        switch (self) {
+            .keyboard => |*keyboard| @constCast(keyboard).deinit(),
+            .pointer, .touch => {
+                const seat = server.input_manager.default_seat;
+                seat.cursor.wlr_cursor.detachInputDevice(wlr_input_device);
+            },
+            .tablet, .tablet_pad, .@"switch" => {},
+        }
+    }
+};
+
 link: wl.list.Link,
-
-/// Careful: The identifier is not unique! A physical input device may have
-/// multiple logical input devices with the exact same vendor id, product id
-/// and name. However identifiers of InputConfigs are unique.
+wlr_input_device: *wlr.InputDevice,
 identifier: []const u8,
+internal_device: InternalDevice,
 
-destroy: wl.Listener(*wlr.InputDevice) =
-    wl.Listener(*wlr.InputDevice).init(handleDestroy),
+destroy: wl.Listener(*wlr.InputDevice) = wl.Listener(*wlr.InputDevice).init(handleDestroy),
 
-pub fn init(self: *hwc.input.Device, wlr_input_device: *wlr.InputDevice) !void {
-    self.* = .{
-        .wlr_input_device = wlr_input_device,
+pub fn create(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) !*hwc.input.Device {
+    const device = try allocator.create(hwc.input.Device);
+    errdefer allocator.destroy(device);
+
+    const identifier = try createIdentifier(allocator, wlr_input_device);
+    errdefer allocator.free(identifier);
+
+    device.* = .{
         .link = undefined,
-        .identifier = blk: {
-            var vendor: c_uint = 0;
-            var product: c_uint = 0;
-
-            if (@as(
-                ?*libinput.Device,
-                @alignCast(@ptrCast(wlr_input_device.getLibinputDevice())),
-            )) |libinput_device| {
-                vendor = libinput_device.getVendorId();
-                product = libinput_device.getProductId();
-            }
-
-            const id = try std.fmt.allocPrint(util.allocator, "{s}-{}-{}-{s}", .{
-                @tagName(wlr_input_device.type),
-                vendor,
-                product,
-                std.mem.trim(
-                    u8,
-                    std.mem.sliceTo(wlr_input_device.name orelse "unkown", 0),
-                    &std.ascii.whitespace,
-                ),
-            });
-
-            for (id) |*byte| {
-                if (!std.ascii.isPrint(byte.*) or std.ascii.isWhitespace(byte.*)) {
-                    byte.* = '_';
-                }
-            }
-
-            break :blk id;
-        },
+        .wlr_input_device = wlr_input_device,
+        .identifier = identifier,
+        .internal_device = undefined,
     };
 
-    wlr_input_device.data = @intFromPtr(self);
-    wlr_input_device.events.destroy.add(&self.destroy);
+    wlr_input_device.data = @intFromPtr(device);
 
-    if (!isKeyboardGroup(self.wlr_input_device)) {
-        server.input_manager.devices.append(self);
-        var capabilities = wl.Seat.Capability{};
+    try device.internal_device.init(wlr_input_device);
 
-        var iterator = server.input_manager.devices.iterator(.forward);
-        while (iterator.next()) |device| {
-            switch (device.wlr_input_device.type) {
-                .keyboard => capabilities.keyboard = true,
-                .pointer => capabilities.pointer = true,
-                .touch => capabilities.touch = true,
-                .tablet_pad, .tablet, .@"switch" => {},
-            }
-        }
+    wlr_input_device.events.destroy.add(&device.destroy);
 
-        server.input_manager.defaultSeat().wlr_seat.setCapabilities(capabilities);
-    }
+    log.info("{s}: identifier='{s}'", .{ @src().fn_name, device.identifier });
+
+    return device;
 }
 
-pub fn deinit(self: *hwc.input.Device) void {
-    self.destroy.link.remove();
-    util.allocator.free(self.identifier);
+pub fn fromWlrInputDevice(wlr_input_device: *wlr.InputDevice) *hwc.input.Device {
+    return @as(?*hwc.input.Device, @ptrFromInt(wlr_input_device.data)) orelse unreachable;
+}
 
-    if (!isKeyboardGroup(self.wlr_input_device)) {
-        self.link.remove();
+fn createIdentifier(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) ![]const u8 {
+    var vendor: c_uint = 0;
+    var product: c_uint = 0;
+
+    if (@as(
+        ?*libinput.Device,
+        @alignCast(@ptrCast(wlr_input_device.getLibinputDevice())),
+    )) |libinput_device| {
+        vendor = libinput_device.getVendorId();
+        product = libinput_device.getProductId();
     }
 
-    self.wlr_input_device.data = 0;
-    self.* = undefined;
+    const id = try fmt.allocPrint(allocator, "{s}-{}-{}-{s}", .{
+        @tagName(wlr_input_device.type),
+        vendor,
+        product,
+        mem.trim(u8, mem.sliceTo(wlr_input_device.name orelse "unkown", 0), &ascii.whitespace),
+    });
+
+    for (id) |*byte| {
+        if (!ascii.isPrint(byte.*) or ascii.isWhitespace(byte.*)) {
+            byte.* = '_';
+        }
+    }
+
+    return id;
 }
 
 fn handleDestroy(
     listener: *wl.Listener(*wlr.InputDevice),
-    _: *wlr.InputDevice,
+    wlr_input_device: *wlr.InputDevice,
 ) void {
     const device: *hwc.input.Device = @fieldParentPtr("destroy", listener);
 
-    switch (device.wlr_input_device.type) {
-        .keyboard => {
-            const keyboard: *hwc.input.Keyboard = @fieldParentPtr("device", device);
-            keyboard.deinit();
-        },
-        .touch, .pointer => {
-            device.deinit();
-            util.allocator.destroy(device);
-        },
-        .tablet => {
-            const tablet: *hwc.input.Tablet = @fieldParentPtr("device", device);
-            tablet.deinit();
-        },
-        .tablet_pad => {
-            const tablet_pad: *hwc.input.Tablet.Pad = @fieldParentPtr("device", device);
-            tablet_pad.deinit();
-        },
-        .@"switch" => {
-            const switch_device: *hwc.input.Switch = @fieldParentPtr("device", device);
-            switch_device.deinit();
-        },
-    }
-}
+    device.destroy.link.remove();
 
-fn isKeyboardGroup(wlr_input_device: *wlr.InputDevice) bool {
-    return wlr_input_device.type == .keyboard and
-        wlr.KeyboardGroup.fromKeyboard(wlr_input_device.toKeyboard()) != null;
+    device.internal_device.deinit(wlr_input_device);
+
+    log.info("{s}: identifier='{s}'", .{ @src().fn_name, device.identifier });
+
+    server.mem_allocator.free(device.identifier);
+    server.mem_allocator.destroy(device);
 }

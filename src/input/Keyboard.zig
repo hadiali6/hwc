@@ -1,172 +1,143 @@
 const std = @import("std");
-const log = std.log.scoped(.keyboard);
+const log = std.log.scoped(.@"input.Keyboard");
+const assert = std.debug.assert;
+const mem = std.mem;
 
 const wayland = @import("wayland");
 const wl = wayland.server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
-const hwc = @import("../hwc.zig");
-const util = @import("../util.zig");
+const hwc = @import("hwc");
+const server = &hwc.server;
 
-const server = &@import("root").server;
+wlr_keyboard: *wlr.Keyboard,
 
-device: hwc.input.Device,
+key: wl.Listener(*wlr.Keyboard.event.Key) = wl.Listener(*wlr.Keyboard.event.Key).init(handleKey),
+modifiers: wl.Listener(*wlr.Keyboard) = wl.Listener(*wlr.Keyboard).init(handleModifiers),
 
-modifiers: wl.Listener(*wlr.Keyboard) =
-    wl.Listener(*wlr.Keyboard).init(handleModifiers),
-key: wl.Listener(*wlr.Keyboard.event.Key) =
-    wl.Listener(*wlr.Keyboard.event.Key).init(handleKey),
-
-pub fn init(self: *hwc.input.Keyboard, wlr_input_device: *wlr.InputDevice) !void {
+pub fn init(self: *hwc.input.Keyboard, wlr_keyboard: *wlr.Keyboard) !void {
     self.* = .{
-        .device = undefined,
+        .wlr_keyboard = wlr_keyboard,
     };
 
-    try self.device.init(wlr_input_device);
-    errdefer self.device.deinit();
+    wlr_keyboard.events.key.add(&self.key);
+    wlr_keyboard.events.modifiers.add(&self.modifiers);
 
-    const context = xkb.Context.new(.no_flags) orelse return error.ContextFailed;
-    defer context.unref();
+    {
+        const xkb_context = xkb.Context.new(.no_flags) orelse return error.XkbContextFailed;
+        defer xkb_context.unref();
 
-    const keymap = xkb.Keymap.newFromNames(context, null, .no_flags) orelse return error.KeymapFailed;
-    defer keymap.unref();
+        const xkb_keymap = xkb.Keymap.newFromNames(xkb_context, null, .no_flags) orelse
+            return error.XkbKeymapFailed;
+        defer xkb_keymap.unref();
 
-    const wlr_keyboard = wlr_input_device.toKeyboard();
-    wlr_keyboard.data = @intFromPtr(self);
-
-    if (!wlr_keyboard.setKeymap(keymap)) {
-        return error.SetKeymapFailed;
+        if (!wlr_keyboard.setKeymap(xkb_keymap)) {
+            return error.XkbSetKeymapFailed;
+        }
     }
 
-    wlr_keyboard.setRepeatInfo(
-        server.config.keyboard_repeat_rate,
-        server.config.keyboard_repeat_delay,
-    );
+    wlr_keyboard.setRepeatInfo(50, 300);
 
-    wlr_keyboard.events.modifiers.add(&self.modifiers);
-    wlr_keyboard.events.key.add(&self.key);
+    {
+        var seat = server.input_manager.default_seat;
+
+        seat.wlr_seat.setKeyboard(wlr_keyboard);
+        assert(seat.wlr_seat.getKeyboard() != null);
+
+        if (seat.wlr_seat.keyboard_state.focused_surface) |focused_wlr_surface| {
+            seat.keyboardNotifyEnter(focused_wlr_surface);
+        }
+    }
+
+    log.info("{s}", .{@src().fn_name});
 }
 
 pub fn deinit(self: *hwc.input.Keyboard) void {
     self.key.link.remove();
     self.modifiers.link.remove();
 
-    const seat = server.input_manager.defaultSeat();
-    const wlr_keyboard = self.device.wlr_input_device.toKeyboard();
+    log.info("{s}", .{@src().fn_name});
+}
 
-    self.device.deinit();
-
-    // If the currently active keyboard of a seat is destroyed we need to set
-    // a new active keyboard. Otherwise wlroots may send an enter event without
-    // first having sent a keymap event if Seat.keyboardNotifyEnter() is called
-    // before a new active keyboard is set.
-    if (seat.wlr_seat.getKeyboard() == wlr_keyboard) {
-        var it = server.input_manager.devices.iterator(.forward);
-        while (it.next()) |device| {
-            if (device.wlr_input_device.type == .keyboard) {
-                seat.wlr_seat.setKeyboard(device.wlr_input_device.toKeyboard());
-            }
-        }
+fn handleModifiers(_: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Keyboard) void {
+    // if the keyboard is in a group, this event will be handled by the group's Keyboard instance
+    if (wlr_keyboard.group != null) {
+        return;
     }
 
-    wlr_keyboard.data = 0;
-    self.* = undefined;
-    util.allocator.destroy(self);
-}
-
-fn handleModifiers(
-    _: *wl.Listener(*wlr.Keyboard),
-    wlr_keyboard: *wlr.Keyboard,
-) void {
-    // If the keyboard is in a group, this event will be handled by the group's Keyboard instance.
-    if (wlr_keyboard.group != null) return;
-
-    const wlr_seat = server.input_manager.defaultSeat().wlr_seat;
+    const wlr_seat = server.input_manager.default_seat.wlr_seat;
     wlr_seat.setKeyboard(wlr_keyboard);
     wlr_seat.keyboardNotifyModifiers(&wlr_keyboard.modifiers);
+
+    const mods = wlr_keyboard.getModifiers();
+    log.debug(
+        "{s}: shift='{}' caps='{}' ctrl='{}' alt='{}' mod2='{}' mod3='{}' logo='{}' mod5='{}'",
+        .{ @src().fn_name, mods.shift, mods.caps, mods.ctrl, mods.alt, mods.mod2, mods.mod3, mods.logo, mods.mod5 },
+    );
 }
 
+// TODO: proper keybinds
 fn handleKey(
     listener: *wl.Listener(*wlr.Keyboard.event.Key),
     event: *wlr.Keyboard.event.Key,
 ) void {
     const keyboard: *hwc.input.Keyboard = @fieldParentPtr("key", listener);
+    const wlr_keyboard = keyboard.wlr_keyboard;
 
-    server.input_manager.handleActivity();
+    // if the keyboard is in a group, this event will be handled by the group's Keyboard instance
+    if (wlr_keyboard.group != null) {
+        return;
+    }
 
-    var device = &keyboard.device;
-    const wlr_keyboard = device.wlr_input_device.toKeyboard();
+    // translate libinput keycode -> xkbcommon
+    const xkb_keycode = event.keycode + 8;
 
-    // If the keyboard is in a group, this event will be handled by the group's Keyboard instance.
-    if (wlr_keyboard.group != null) return;
-
-    var seat = server.input_manager.defaultSeat();
-
-    seat.clearRepeatingMapping();
-
-    // Translate libinput keycode -> xkbcommon
-    const keycode = event.keycode + 8;
-
-    const modifiers = wlr_keyboard.getModifiers();
-
-    // We must ref() the state here as a mapping could change the keyboard layout.
     const xkb_state = (wlr_keyboard.xkb_state orelse return).ref();
     defer xkb_state.unref();
 
-    const keysyms = xkb_state.keyGetSyms(keycode);
+    const keysyms = xkb_state.keyGetSyms(xkb_keycode);
 
-    const ignore_binds = if (seat.focused == .toplevel)
-        seat.focused.toplevel.keyboard_shortcuts_inhibit
-    else
-        false;
-
-    if (!ignore_binds) {
+    const keybind_executed = blk: {
         for (keysyms) |sym| {
-            if (!(event.state == .released) and ttyKeybinds(sym)) {
-                return;
-            }
-        }
+            log.debug("{s} device='{s}' key='{s}' state='{s}'", .{
+                @src().fn_name,
+                hwc.input.Device.fromWlrInputDevice(&wlr_keyboard.base).identifier,
+                inner_blk: {
+                    var buffer: [64]u8 = undefined;
+                    _ = sym.getName(&buffer, buffer.len);
+                    break :inner_blk buffer;
+                },
+                @tagName(event.state),
+            });
+
+            break :blk event.state == .pressed and vtKeybind(sym);
+        } else break :blk false;
+    };
+
+    if (!keybind_executed) {
+        const wlr_seat = server.input_manager.default_seat.wlr_seat;
+        wlr_seat.setKeyboard(wlr_keyboard);
+        wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
     }
-
-    const keybind_was_run = if (event.state == .pressed and !ignore_binds) seat.handleKeybind(
-        keycode,
-        modifiers,
-        event.state == .released,
-        xkb_state,
-    ) else false;
-
-    if (!keybind_was_run) {
-        seat.wlr_seat.setKeyboard(wlr_keyboard);
-        seat.wlr_seat.keyboardNotifyKey(
-            event.time_msec,
-            event.keycode,
-            event.state,
-        );
-    }
-
-    if (event.state == .released and !ignore_binds) _ = seat.handleKeybind(
-        keycode,
-        modifiers,
-        event.state == .released,
-        xkb_state,
-    );
 }
 
-/// Handle hardcoded VT switching keybinds.
-/// Returns true if the keysym was handled.
-fn ttyKeybinds(keysym: xkb.Keysym) bool {
+fn vtKeybind(keysym: xkb.Keysym) bool {
     switch (@intFromEnum(keysym)) {
         xkb.Keysym.XF86Switch_VT_1...xkb.Keysym.XF86Switch_VT_12 => {
-            log.debug("switch VT keysym received", .{});
-            if (server.session) |session| {
+            log.debug("{s}: switch VT keysym received: {}", .{ @src().fn_name, keysym });
+
+            if (server.wlr_session) |wlr_session| {
                 const vt = @intFromEnum(keysym) - xkb.Keysym.XF86Switch_VT_1 + 1;
-                const log_server = std.log.scoped(.server);
-                log_server.info("switching to VT {}", .{vt});
-                session.changeVt(vt) catch log_server.err("changing VT failed", .{});
+
+                log.info("{s}: switching to VT {}", .{ @src().fn_name, vt });
+                wlr_session.changeVt(vt) catch |err| {
+                    log.err("{s}: failed: '{}'", .{ @src().fn_name, err });
+                };
             }
+
+            return true;
         },
         else => return false,
     }
-    return true;
 }

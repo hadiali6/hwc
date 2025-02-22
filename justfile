@@ -1,34 +1,19 @@
-test-touch:
-    uv venv
-    source ./.venv/bin/activate
-    uv pip install libevdev
-    uv run ./tests/touch.py
+all: run_no_llvm
 
-test-tablet-tool:
-    uv venv
-    source ./.venv/bin/activate
-    uv pip install libevdev
-    uv run ./tests/tablet-tool-1.py
-    uv run ./tests/tablet-tool-2.py
+test:
+    clear && zig build test -Dtarget=x86_64-linux-gnu -Dcpu=x86_64 --search-prefix /usr -freference-trace --summary all 
 
-test-tablet-tool-1:
-    uv venv
-    source ./.venv/bin/activate
-    uv pip install libevdev
-    uv run ./tests/tablet-tool-1.py
+build:
+    clear && zig build -Dtarget=x86_64-linux-gnu -Dcpu=x86_64 --search-prefix /usr -freference-trace
 
-test-tablet-tool-2:
-    uv venv
-    source ./.venv/bin/activate
-    uv pip install libevdev
-    uv run ./tests/tablet-tool-2.py
+run_no_llvm:
+    clear && zig build run -Dno-llvm -Dtarget=x86_64-linux-gnu -Dcpu=x86_64 --search-prefix /usr -freference-trace
 
-# note:
-# this test only works under DRM backend
-# not sure why as `libinput debug-events` shows the events happening properly
-# also by default systemd-logind does a suspend (aka set computer to sleep) upon switch on
-test-switch:
-    uv venv
-    source ./.venv/bin/activate
-    uv pip install libevdev
-    uv run ./tests/switch.py
+run_llvm:
+    clear && zig build run -Dtarget=x86_64-linux-gnu -Dcpu=x86_64 --search-prefix /usr -freference-trace
+
+valgrind:
+    clear && valgrind --leak-check=full ./zig-out/bin/hwc
+
+clean:
+    rm vgcore.*
