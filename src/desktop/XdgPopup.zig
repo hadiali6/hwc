@@ -11,9 +11,11 @@ const wlr = @import("wlroots");
 const hwc = @import("hwc");
 const server = &hwc.server;
 
+// TODO fix unnecessary output damage on toplevels when popups show up
+
 wlr_xdg_popup: *wlr.XdgPopup,
 root_tree: *wlr.SceneTree,
-tree: *wlr.SceneTree,
+surface_tree: *wlr.SceneTree,
 
 destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
 reposition: wl.Listener(void) = wl.Listener(void).init(handleReposition),
@@ -32,7 +34,7 @@ pub fn create(
     popup.* = .{
         .wlr_xdg_popup = wlr_xdg_popup,
         .root_tree = root_tree,
-        .tree = try parent_tree.createSceneXdgSurface(wlr_xdg_popup.base),
+        .surface_tree = try parent_tree.createSceneXdgSurface(wlr_xdg_popup.base),
     };
 
     if (popup.wlr_xdg_popup.parent) |parent_wlr_surface| {
@@ -64,11 +66,27 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     server.mem_allocator.destroy(popup);
 }
 
-// TODO
 fn handleReposition(listener: *wl.Listener(void)) void {
     const popup: *hwc.desktop.XdgPopup = @fieldParentPtr("reposition", listener);
+    popup.configure();
 
-    const scene_descriptor = hwc.desktop.SceneDescriptor.fromNode(&popup.root_tree.node).?;
+    log.debug("{s}: parent='{!s}'", .{ @src().fn_name, popup.parentSurfaceStatus() });
+}
+
+fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
+    const popup: *hwc.desktop.XdgPopup = @fieldParentPtr("commit", listener);
+
+    if (popup.wlr_xdg_popup.base.initial_commit) {
+        popup.configure();
+    }
+
+    log.debug("{s}: parent='{!s}'", .{ @src().fn_name, popup.parentSurfaceStatus() });
+}
+
+fn configure(self: *hwc.desktop.XdgPopup) void {
+    // TODO handle set_reactive properly
+
+    const scene_descriptor = hwc.desktop.SceneDescriptor.fromNode(&self.root_tree.node).?;
     const output = switch (scene_descriptor.focusable) {
         .toplevel => |toplevel| toplevel.primary_output,
         .layer_surface => |layer_surface| layer_surface.output,
@@ -80,25 +98,12 @@ fn handleReposition(listener: *wl.Listener(void)) void {
 
     var root_lx: c_int = undefined;
     var root_ly: c_int = undefined;
-    _ = popup.root_tree.node.coords(&root_lx, &root_ly);
+    _ = self.root_tree.node.coords(&root_lx, &root_ly);
 
     box.x -= root_lx;
     box.y -= root_ly;
 
-    popup.wlr_xdg_popup.unconstrainFromBox(&box);
-
-    log.debug("{s}: parent='{!s}'", .{ @src().fn_name, popup.parentSurfaceStatus() });
-}
-
-// TODO
-fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
-    const popup: *hwc.desktop.XdgPopup = @fieldParentPtr("commit", listener);
-
-    if (popup.wlr_xdg_popup.base.initial_commit) {
-        handleReposition(&popup.reposition);
-    }
-
-    log.debug("{s}: parent='{!s}'", .{ @src().fn_name, popup.parentSurfaceStatus() });
+    self.wlr_xdg_popup.unconstrainFromBox(&box);
 }
 
 fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.XdgPopup) void {
@@ -108,7 +113,7 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), wlr_xdg_popup: *wlr.Xdg
         server.mem_allocator,
         wlr_xdg_popup,
         popup.root_tree,
-        popup.tree,
+        popup.surface_tree,
     ) catch |err| {
         log.err("{s} failed: '{}'", .{ @src().fn_name, err });
         if (err == error.OutOfMemory) {

@@ -18,7 +18,8 @@ wlr_scene_output: *wlr.SceneOutput,
 
 layers: struct {
     background: *wlr.SceneTree,
-    bottom: *wlr.SceneTree, // TODO: layer(s) for windows
+    bottom: *wlr.SceneTree,
+    windows: *wlr.SceneTree,
     top: *wlr.SceneTree,
     overlay: *wlr.SceneTree,
     popups: *wlr.SceneTree,
@@ -93,21 +94,17 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.O
         .wlr_scene_output = wlr_scene_output,
 
         .layers = .{
-            .popups = try server.surface_manager.wlr_scene.tree.createSceneTree(),
+            // order matters here
             .background = try server.surface_manager.wlr_scene.tree.createSceneTree(),
             .bottom = try server.surface_manager.wlr_scene.tree.createSceneTree(),
+            .windows = try server.surface_manager.wlr_scene.tree.createSceneTree(),
             .top = try server.surface_manager.wlr_scene.tree.createSceneTree(),
             .overlay = try server.surface_manager.wlr_scene.tree.createSceneTree(),
+            .popups = try server.surface_manager.wlr_scene.tree.createSceneTree(),
         },
     };
 
-    errdefer {
-        output.layers.background.node.destroy();
-        output.layers.bottom.node.destroy();
-        output.layers.top.node.destroy();
-        output.layers.overlay.node.destroy();
-        output.layers.popups.node.destroy();
-    }
+    wlr_output.data = @intFromPtr(output);
 
     _ = try server.output_manager.wlr_output_layout.addAuto(wlr_output);
     errdefer server.output_manager.wlr_output_layout.remove(wlr_output);
@@ -118,8 +115,6 @@ pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.O
 
         wlr_scene_output.setPosition(box.x, box.y);
     }
-
-    wlr_output.data = @intFromPtr(output);
 
     wlr_output.events.destroy.add(&output.destroy);
     wlr_output.events.frame.add(&output.frame);
@@ -150,11 +145,6 @@ pub fn layerSurfaceTree(self: hwc.desktop.Output, layer: zwlr.LayerShellV1.Layer
 
 fn handleDestroy(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
     const output: *hwc.desktop.Output = @fieldParentPtr("destroy", listener);
-
-    for ([_]zwlr.LayerShellV1.Layer{ .overlay, .top, .bottom, .background }) |layer| {
-        const tree = output.layerSurfaceTree(layer);
-        tree.node.destroy();
-    }
 
     server.output_manager.wlr_output_layout.remove(wlr_output);
 

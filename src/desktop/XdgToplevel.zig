@@ -44,6 +44,7 @@ request_move: wl.Listener(*wlr.XdgToplevel.event.Move) =
     wl.Listener(*wlr.XdgToplevel.event.Move).init(handleRequestMove),
 request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
     wl.Listener(*wlr.XdgToplevel.event.Resize).init(handleRequestResize),
+set_parent: wl.Listener(void) = wl.Listener(void).init(handleSetParent),
 set_title: wl.Listener(void) = wl.Listener(void).init(handleSetTitle),
 set_app_id: wl.Listener(void) = wl.Listener(void).init(handleSetAppId),
 
@@ -54,11 +55,13 @@ pub fn create(
     const toplevel = try allocator.create(hwc.desktop.XdgToplevel);
     errdefer allocator.destroy(toplevel);
 
-    const surface_tree = try server.surface_manager.wlr_scene.tree.createSceneTree();
-    errdefer surface_tree.node.destroy();
+    log.debug("{*}", .{wlr_xdg_toplevel.parent});
 
     assert(!server.output_manager.outputs.empty());
     const current_output = server.input_manager.default_seat.focused_output.?;
+
+    const surface_tree = try current_output.layers.windows.createSceneTree();
+    errdefer surface_tree.node.destroy();
 
     const popup_tree = try current_output.layers.popups.createSceneTree();
     errdefer popup_tree.node.destroy();
@@ -72,10 +75,11 @@ pub fn create(
         .primary_output = current_output,
     };
 
+    wlr_xdg_toplevel.base.data = @intFromPtr(toplevel);
+    wlr_xdg_toplevel.base.surface.data = @intFromPtr(toplevel.surface_tree);
+
     try hwc.desktop.SceneDescriptor.create(allocator, &surface_tree.node, .{ .toplevel = toplevel });
     try hwc.desktop.SceneDescriptor.create(allocator, &popup_tree.node, .{ .toplevel = toplevel });
-
-    wlr_xdg_toplevel.base.surface.data = @intFromPtr(toplevel.surface_tree);
 
     wlr_xdg_toplevel.base.surface.events.unmap.add(&toplevel.unmap);
     errdefer toplevel.unmap.link.remove();
@@ -91,17 +95,23 @@ pub fn create(
     wlr_xdg_toplevel.base.surface.events.map.add(&toplevel.map);
     wlr_xdg_toplevel.base.surface.events.commit.add(&toplevel.commit);
     wlr_xdg_toplevel.base.events.new_popup.add(&toplevel.new_popup);
+    toplevel.wlr_xdg_toplevel.events.set_parent.add(&toplevel.set_parent);
 
     toplevel.output_tracker.events.outputs_update.add(&toplevel.buffer_outputs_update);
     toplevel.output_tracker.events.output_enter.add(&toplevel.buffer_output_enter);
     toplevel.output_tracker.events.output_leave.add(&toplevel.buffer_output_leave);
 
-    log.info(
-        "{s}: app_id='{?s}' title='{?s}'",
-        .{ @src().fn_name, toplevel.wlr_xdg_toplevel.app_id, toplevel.wlr_xdg_toplevel.title },
-    );
+    log.info("{s}: app_id='{?s}' title='{?s}'", .{
+        @src().fn_name,
+        toplevel.wlr_xdg_toplevel.app_id,
+        toplevel.wlr_xdg_toplevel.title,
+    });
 
     return toplevel;
+}
+
+pub fn fromWlrXdgSurface(wlr_xdg_surface: *wlr.XdgSurface) *hwc.desktop.XdgToplevel {
+    return @as(?*hwc.desktop.XdgToplevel, @ptrFromInt(wlr_xdg_surface.data)).?;
 }
 
 fn findBuffer(wlr_scene_tree: *wlr.SceneTree) ?*wlr.SceneBuffer {
@@ -137,6 +147,8 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 
     toplevel.surface_tree.node.destroy();
     toplevel.popup_tree.node.destroy();
+
+    toplevel.set_parent.link.remove();
 
     toplevel.destroy.link.remove();
     toplevel.map.link.remove();
@@ -212,7 +224,8 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     }
 
     toplevel.popup_tree.node.reparent(toplevel.primary_output.layers.popups);
-    toplevel.surface_tree.node.lowerToBottom(); // TODO: fix unecessary damage
+    toplevel.surface_tree.node.reparent(toplevel.primary_output.layers.windows);
+    // toplevel.surface_tree.node.lowerToBottom(); // TODO: fix unecessary damage
 
     log.debug("commit {}x{} {}x{} {s}", .{
         box.width, box.height, box.x, box.y, toplevel.primary_output.wlr_output.name,
@@ -302,16 +315,42 @@ fn handleRequestResize(
     cursor.grab_box.y += toplevel.y;
 }
 
+fn handleSetParent(listener: *wl.Listener(void)) void {
+    const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("set_parent", listener);
+
+    if (toplevel.wlr_xdg_toplevel.parent == null) {
+        return;
+    }
+
+    // center any window that has a parent
+    // TODO (make this configurable) for now this is a sane default
+    const parent_toplevel = fromWlrXdgSurface(toplevel.wlr_xdg_toplevel.parent.?.base);
+
+    var box: wlr.Box = undefined;
+    parent_toplevel.wlr_xdg_toplevel.base.getGeometry(&box);
+
+    const new_x = parent_toplevel.x + @divTrunc(box.width, 4);
+    const new_y = parent_toplevel.y + @divTrunc(box.height, 4);
+
+    toplevel.surface_tree.node.setPosition(new_x, new_y);
+    toplevel.x = new_x;
+    toplevel.y = new_y;
+}
+
 // TODO
 fn handleSetTitle(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("set_title", listener);
     _ = toplevel;
+
+    unreachable;
 }
 
 // TODO
 fn handleSetAppId(listener: *wl.Listener(void)) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("set_app_id", listener);
     _ = toplevel;
+
+    unreachable;
 }
 
 fn handleBufferOutputsUpdate(
@@ -319,6 +358,8 @@ fn handleBufferOutputsUpdate(
     event: *wlr.SceneBuffer.event.OutputsUpdate,
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_outputs_update", listener);
+
+    // TODO do something outside of logging
 
     var array_list = std.ArrayListUnmanaged(u8){};
 
@@ -355,6 +396,8 @@ fn handleBufferOutputEnter(
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_output_enter", listener);
 
+    // TODO do something outside of logging
+
     log.info("{s}: output='{s}' app_id='{?s}' title='{?s}'", .{
         @src().fn_name,
         wlr_scene_output.output.name,
@@ -368,6 +411,8 @@ fn handleBufferOutputLeave(
     wlr_scene_output: *wlr.SceneOutput,
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("buffer_output_leave", listener);
+
+    // TODO do something outside of logging
 
     log.info("{s}: output='{s}' app_id='{?s}' title='{?s}'", .{
         @src().fn_name,
