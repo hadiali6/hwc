@@ -1,28 +1,29 @@
 .{
-    .name = "hwc",
+    .name = .hwc,
     .version = "0.0.0",
-    .minimum_zig_version = "0.13.0",
+    .minimum_zig_version = "0.14.0",
+    .fingerprint = 0xd409c593a942869,
 
     .dependencies = .{
         .@"zig-wayland" = .{
-            .url = "https://codeberg.org/ifreund/zig-wayland/archive/8fe2242147d558836f05b5e5a7f22420a570331c.tar.gz",
-            .hash = "1220e4ca22ab59015ae3500b60e6ef0504af568c5d1b4b6255bcbc1ba77a896c601d",
+            .url = "https://codeberg.org/ifreund/zig-wayland/archive/f3c5d503e540ada8cbcb056420de240af0c094f7.tar.gz",
+            .hash = "wayland-0.4.0-dev-lQa1kjfIAQCmhhQu3xF0KH-94-TzeMXOqfnP0-Dg6Wyy",
         },
         .@"zig-wlroots" = .{
-            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/84f8c8b84c0361dfc8663c06c0c62a34d716720d.tar.gz",
-            .hash = "1220e00cd68579fcbcc7c80a291a024083df43733ecab3c83d91f549ada6e237c09a",
-        },
-        .@"zig-pixman" = .{
-            .url = "https://codeberg.org/ifreund/zig-pixman/archive/99a74e10d12cdc5db6a0fb206bab9a0a63a5824b.tar.gz",
-            .hash = "1220fe6a4bc3732fbd840a9576ec640a10bc56ade3e6ed826465e690d3f05941157f",
+            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/4e440afdf42c2f2599251307369518b67e6cbbb1.tar.gz",
+            .hash = "wlroots-0.18.3-dev-jmOlch3IAwAoFjPY3OylddJ6tWuA5MpqhplSDfGb4Gdr",
         },
         .@"zig-xkbcommon" = .{
-            .url = "https://codeberg.org/ifreund/zig-xkbcommon/archive/d8412eed455c8cfea5b4cda2ea260095ccb47045.tar.gz",
-            .hash = "12200989a0e5c5d8186dd16752e3d83d914d4f54ecca7b3e147443f13a9580ede671",
+            .url = "https://codeberg.org/ifreund/zig-xkbcommon/archive/87e0910e12af79cbb74a37143c881abea32c96b7.tar.gz",
+            .hash = "xkbcommon-0.4.0-dev-VDqIe3a9AQDQa1H4Vh7__mVphznD-7tyNWdnjFgf-9fC",
+        },
+        .@"zig-pixman" = .{
+            .url = "https://codeberg.org/ifreund/zig-pixman/archive/12904cec1776114c4a4adc368b2e500605bb6060.tar.gz",
+            .hash = "pixman-0.4.0-dev-LClMn0GVAAALHJ9uPqSbPLA6BCY4NAlYHyb6uSr2Bs1R",
         },
         .@"zig-libinput" = .{
-            .url = "https://github.com/hadiali6/zig-libinput/archive/refs/heads/master.tar.gz",
-            .hash = "1220965d0c4c33d569765c3e3ecf874604b55f90dc829d6bf831f433b84a56bbb94a",
+            .url = "https://github.com/hadiali6/zig-libinput/archive/a99cf5bf7167cbad1c01fd1e1348c5446d18bc3b.tar.gz",
+            .hash = "zig_libinput-0.0.0-gohI68ZVAACzg3u7jgOfGYjNI9WYBUmeBM6wy6zdnfDI",
         },
     },
 
@@ -30,5 +31,7 @@
         "build.zig",
         "build.zig.zon",
         "src",
+        "README.md",
+        "LICENSE",
     },
 }

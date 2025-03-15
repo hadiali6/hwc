@@ -12,12 +12,11 @@ const server = &hwc.server;
 wlr_scene: *wlr.Scene,
 
 wlr_xdg_shell: *wlr.XdgShell,
-new_toplevel: wl.Listener(*wlr.XdgToplevel) = wl.Listener(*wlr.XdgToplevel).init(handleNewToplevel),
+new_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(handleNewToplevel),
 toplevels: wl.list.Head(hwc.desktop.XdgToplevel, .link),
 
 wlr_layer_shell: *wlr.LayerShellV1,
-new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) =
-    wl.Listener(*wlr.LayerSurfaceV1).init(handleNewLayerSurface),
+new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) = .init(handleNewLayerSurface),
 
 // TODO: create/use wlr.ForeignToplevelHandleV1
 wlr_foreign_toplevel_manager: *wlr.ForeignToplevelManagerV1,

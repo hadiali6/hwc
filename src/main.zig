@@ -28,7 +28,9 @@ pub fn main() !void {
 // for testing...
 fn config() !void {
     // try api.process.spawn("hello-wayland");
-    // try api.process.spawn("foot 2> /dev/null");
+    try api.process.spawn("foot 2> /dev/null");
+    // try api.process.spawn("virt-manager");
+    // try api.process.spawn("pt");
 }
 
 test "server" {

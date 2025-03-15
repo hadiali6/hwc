@@ -12,7 +12,7 @@ const server = &hwc.server;
 wlr_scene_node: *wlr.SceneNode,
 focusable: hwc.desktop.Focusable,
 
-destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
+destroy: wl.Listener(void) = .init(handleDestroy),
 
 pub fn create(
     allocator: mem.Allocator,

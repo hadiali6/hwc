@@ -54,7 +54,7 @@ wlr_input_device: *wlr.InputDevice,
 identifier: []const u8,
 internal_device: InternalDevice,
 
-destroy: wl.Listener(*wlr.InputDevice) = wl.Listener(*wlr.InputDevice).init(handleDestroy),
+destroy: wl.Listener(*wlr.InputDevice) = .init(handleDestroy),
 
 pub fn create(allocator: mem.Allocator, wlr_input_device: *wlr.InputDevice) !*hwc.input.Device {
     const device = try allocator.create(hwc.input.Device);

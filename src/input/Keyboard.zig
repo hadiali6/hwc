@@ -13,8 +13,8 @@ const server = &hwc.server;
 
 wlr_keyboard: *wlr.Keyboard,
 
-key: wl.Listener(*wlr.Keyboard.event.Key) = wl.Listener(*wlr.Keyboard.event.Key).init(handleKey),
-modifiers: wl.Listener(*wlr.Keyboard) = wl.Listener(*wlr.Keyboard).init(handleModifiers),
+key: wl.Listener(*wlr.Keyboard.event.Key) = .init(handleKey),
+modifiers: wl.Listener(*wlr.Keyboard) = .init(handleModifiers),
 
 pub fn init(self: *hwc.input.Keyboard, wlr_keyboard: *wlr.Keyboard) !void {
     self.* = .{

@@ -10,7 +10,7 @@ const hwc = @import("hwc");
 const server = &hwc.server;
 
 global: *wl.Global,
-server_destroy: wl.Listener(*wl.Server) = wl.Listener(*wl.Server).init(handleServerDestroy),
+server_destroy: wl.Listener(*wl.Server) = .init(handleServerDestroy),
 
 pub fn init(self: *hwc.StatusManager) !void {
     self.* = .{

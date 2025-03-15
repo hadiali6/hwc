@@ -13,7 +13,7 @@ pub fn setup() void {
         .mask = posix.empty_sigset,
         .flags = 0,
     };
-    posix.sigaction(posix.SIG.PIPE, &sig_ignore, null) catch unreachable;
+    posix.sigaction(posix.SIG.PIPE, &sig_ignore, null);
 
     const original = posix.getrlimit(.NOFILE) catch |err| {
         setup_log.err(
@@ -68,7 +68,7 @@ pub fn spawn(cmd: []const u8) !void {
         if (grandchild_pid == 0) {
             posix.execveZ("/bin/sh", &child_args, c.environ) catch posix.system._exit(1);
         } else {
-            spawn_log.info("{s}: pid='{}'", .{ @src().fn_name, grandchild_pid });
+            spawn_log.info("{s}: cmd='{s}' pid='{}'", .{ @src().fn_name, cmd, grandchild_pid });
             posix.system._exit(0);
         }
     } else {
@@ -89,16 +89,14 @@ fn cleanupChild() void {
         unreachable;
     }
 
-    if (posix.system.sigprocmask(posix.SIG.SETMASK, &posix.empty_sigset, null) < 0) {
-        unreachable;
-    }
+    posix.sigprocmask(posix.SIG.SETMASK, &posix.empty_sigset, null);
 
     const sig_default = posix.Sigaction{
         .handler = .{ .handler = posix.SIG.DFL },
         .mask = posix.empty_sigset,
         .flags = 0,
     };
-    posix.sigaction(posix.SIG.PIPE, &sig_default, null) catch unreachable;
+    posix.sigaction(posix.SIG.PIPE, &sig_default, null);
 
     if (original_rlimit) |original| {
         posix.setrlimit(.NOFILE, original) catch |err| {

@@ -27,7 +27,7 @@ wlr_renderer: *wlr.Renderer,
 wlr_allocator: *wlr.Allocator,
 wlr_shm: *wlr.Shm,
 
-renderer_lost: wl.Listener(void) = wl.Listener(void).init(handleRendererLost),
+renderer_lost: wl.Listener(void) = .init(handleRendererLost),
 
 wlr_drm: ?*wlr.Drm = null,
 wlr_linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,

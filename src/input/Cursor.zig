@@ -36,53 +36,34 @@ grab_y: f64 = 0,
 grab_box: wlr.Box = undefined,
 resize_edges: wlr.Edges = .{},
 
-frame: wl.Listener(*wlr.Cursor) = wl.Listener(*wlr.Cursor).init(handleFrame),
+frame: wl.Listener(*wlr.Cursor) = .init(handleFrame),
 
-axis: wl.Listener(*wlr.Pointer.event.Axis) =
-    wl.Listener(*wlr.Pointer.event.Axis).init(handlePointerAxis),
-button: wl.Listener(*wlr.Pointer.event.Button) =
-    wl.Listener(*wlr.Pointer.event.Button).init(handlePointerButton),
-motion: wl.Listener(*wlr.Pointer.event.Motion) =
-    wl.Listener(*wlr.Pointer.event.Motion).init(handlePointerMotion),
-motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) =
-    wl.Listener(*wlr.Pointer.event.MotionAbsolute).init(handlePointerMotionAbsolute),
+axis: wl.Listener(*wlr.Pointer.event.Axis) = .init(handlePointerAxis),
+button: wl.Listener(*wlr.Pointer.event.Button) = .init(handlePointerButton),
+motion: wl.Listener(*wlr.Pointer.event.Motion) = .init(handlePointerMotion),
+motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) = .init(handlePointerMotionAbsolute),
 
-pinch_begin: wl.Listener(*wlr.Pointer.event.PinchBegin) =
-    wl.Listener(*wlr.Pointer.event.PinchBegin).init(handlePointerPinchBegin),
-pinch_update: wl.Listener(*wlr.Pointer.event.PinchUpdate) =
-    wl.Listener(*wlr.Pointer.event.PinchUpdate).init(handlePointerPinchUpdate),
-pinch_end: wl.Listener(*wlr.Pointer.event.PinchEnd) =
-    wl.Listener(*wlr.Pointer.event.PinchEnd).init(handlePointerPinchEnd),
+pinch_begin: wl.Listener(*wlr.Pointer.event.PinchBegin) = .init(handlePointerPinchBegin),
+pinch_update: wl.Listener(*wlr.Pointer.event.PinchUpdate) = .init(handlePointerPinchUpdate),
+pinch_end: wl.Listener(*wlr.Pointer.event.PinchEnd) = .init(handlePointerPinchEnd),
 
-swipe_begin: wl.Listener(*wlr.Pointer.event.SwipeBegin) =
-    wl.Listener(*wlr.Pointer.event.SwipeBegin).init(handlePointerSwipeBegin),
-swipe_update: wl.Listener(*wlr.Pointer.event.SwipeUpdate) =
-    wl.Listener(*wlr.Pointer.event.SwipeUpdate).init(handlePointerSwipeUpdate),
-swipe_end: wl.Listener(*wlr.Pointer.event.SwipeEnd) =
-    wl.Listener(*wlr.Pointer.event.SwipeEnd).init(handlePointerSwipeEnd),
+swipe_begin: wl.Listener(*wlr.Pointer.event.SwipeBegin) = .init(handlePointerSwipeBegin),
+swipe_update: wl.Listener(*wlr.Pointer.event.SwipeUpdate) = .init(handlePointerSwipeUpdate),
+swipe_end: wl.Listener(*wlr.Pointer.event.SwipeEnd) = .init(handlePointerSwipeEnd),
 
-hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) =
-    wl.Listener(*wlr.Pointer.event.HoldBegin).init(handlePointerHoldBegin),
-hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) =
-    wl.Listener(*wlr.Pointer.event.HoldEnd).init(handlePointerHoldEnd),
+hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) = .init(handlePointerHoldBegin),
+hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) = .init(handlePointerHoldEnd),
 
-touch_up: wl.Listener(*wlr.Touch.event.Up) = wl.Listener(*wlr.Touch.event.Up).init(handleTouchUp),
-touch_down: wl.Listener(*wlr.Touch.event.Down) =
-    wl.Listener(*wlr.Touch.event.Down).init(handleTouchDown),
-touch_motion: wl.Listener(*wlr.Touch.event.Motion) =
-    wl.Listener(*wlr.Touch.event.Motion).init(handleTouchMotion),
-touch_cancel: wl.Listener(*wlr.Touch.event.Cancel) =
-    wl.Listener(*wlr.Touch.event.Cancel).init(handleTouchCancel),
-touch_frame: wl.Listener(void) = wl.Listener(void).init(handleTouchFrame),
+touch_up: wl.Listener(*wlr.Touch.event.Up) = .init(handleTouchUp),
+touch_down: wl.Listener(*wlr.Touch.event.Down) = .init(handleTouchDown),
+touch_motion: wl.Listener(*wlr.Touch.event.Motion) = .init(handleTouchMotion),
+touch_cancel: wl.Listener(*wlr.Touch.event.Cancel) = .init(handleTouchCancel),
+touch_frame: wl.Listener(void) = .init(handleTouchFrame),
 
-tablet_tool_axis: wl.Listener(*wlr.Tablet.event.Axis) =
-    wl.Listener(*wlr.Tablet.event.Axis).init(handleTabletToolAxis),
-tablet_tool_proximity: wl.Listener(*wlr.Tablet.event.Proximity) =
-    wl.Listener(*wlr.Tablet.event.Proximity).init(handleTabletToolProximity),
-tablet_tool_tip: wl.Listener(*wlr.Tablet.event.Tip) =
-    wl.Listener(*wlr.Tablet.event.Tip).init(handleTabletToolTip),
-tablet_tool_button: wl.Listener(*wlr.Tablet.event.Button) =
-    wl.Listener(*wlr.Tablet.event.Button).init(handleTabletToolButton),
+tablet_tool_axis: wl.Listener(*wlr.Tablet.event.Axis) = .init(handleTabletToolAxis),
+tablet_tool_proximity: wl.Listener(*wlr.Tablet.event.Proximity) = .init(handleTabletToolProximity),
+tablet_tool_tip: wl.Listener(*wlr.Tablet.event.Tip) = .init(handleTabletToolTip),
+tablet_tool_button: wl.Listener(*wlr.Tablet.event.Button) = .init(handleTabletToolButton),
 
 pub fn init(self: *hwc.input.Cursor) !void {
     self.* = .{
@@ -208,10 +189,6 @@ fn handlePointerButton(
             cursor.wlr_cursor.x,
             cursor.wlr_cursor.y,
         )) |result| {
-            std.debug.print(
-                "{?*} {*} {} {}\n",
-                .{ result.wlr_surface, result.wlr_scene_node, result.sx, result.sy },
-            );
             if (hwc.desktop.SceneDescriptor.fromNode(result.wlr_scene_node)) |scene_descriptor| {
                 seat.focus(scene_descriptor.focusable);
             }

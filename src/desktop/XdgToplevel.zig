@@ -22,31 +22,25 @@ x: i32 = 0,
 y: i32 = 0,
 
 // listeners that are always active over the toplevel's lifetime
-destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
-map: wl.Listener(void) = wl.Listener(void).init(handleMap),
-unmap: wl.Listener(void) = wl.Listener(void).init(handleUnmap),
-commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(handleCommit),
-new_popup: wl.Listener(*wlr.XdgPopup) = wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
-buffer_outputs_update: wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate) =
-    wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate).init(handleBufferOutputsUpdate),
-buffer_output_enter: wl.Listener(*wlr.SceneOutput) =
-    wl.Listener(*wlr.SceneOutput).init(handleBufferOutputEnter),
-buffer_output_leave: wl.Listener(*wlr.SceneOutput) =
-    wl.Listener(*wlr.SceneOutput).init(handleBufferOutputLeave),
+destroy: wl.Listener(void) = .init(handleDestroy),
+map: wl.Listener(void) = .init(handleMap),
+unmap: wl.Listener(void) = .init(handleUnmap),
+commit: wl.Listener(*wlr.Surface) = .init(handleCommit),
+new_popup: wl.Listener(*wlr.XdgPopup) = .init(handleNewPopup),
+buffer_outputs_update: wl.Listener(*wlr.SceneBuffer.event.OutputsUpdate) = .init(handleBufferOutputsUpdate),
+buffer_output_enter: wl.Listener(*wlr.SceneOutput) = .init(handleBufferOutputEnter),
+buffer_output_leave: wl.Listener(*wlr.SceneOutput) = .init(handleBufferOutputLeave),
 
 // listeners that are only active while the toplevel is mapped
-ack_configure: wl.Listener(*wlr.XdgSurface.Configure) =
-    wl.Listener(*wlr.XdgSurface.Configure).init(handleAckConfigure),
-request_fullscreen: wl.Listener(void) = wl.Listener(void).init(handleRequestFullscreen),
-request_maximize: wl.Listener(void) = wl.Listener(void).init(handleRequestMaximize),
-request_minimize: wl.Listener(void) = wl.Listener(void).init(handleRequestMinimize),
-request_move: wl.Listener(*wlr.XdgToplevel.event.Move) =
-    wl.Listener(*wlr.XdgToplevel.event.Move).init(handleRequestMove),
-request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) =
-    wl.Listener(*wlr.XdgToplevel.event.Resize).init(handleRequestResize),
-set_parent: wl.Listener(void) = wl.Listener(void).init(handleSetParent),
-set_title: wl.Listener(void) = wl.Listener(void).init(handleSetTitle),
-set_app_id: wl.Listener(void) = wl.Listener(void).init(handleSetAppId),
+ack_configure: wl.Listener(*wlr.XdgSurface.Configure) = .init(handleAckConfigure),
+request_fullscreen: wl.Listener(void) = .init(handleRequestFullscreen),
+request_maximize: wl.Listener(void) = .init(handleRequestMaximize),
+request_minimize: wl.Listener(void) = .init(handleRequestMinimize),
+request_move: wl.Listener(*wlr.XdgToplevel.event.Move) = .init(handleRequestMove),
+request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) = .init(handleRequestResize),
+set_parent: wl.Listener(void) = .init(handleSetParent),
+set_title: wl.Listener(void) = .init(handleSetTitle),
+set_app_id: wl.Listener(void) = .init(handleSetAppId),
 
 pub fn create(
     allocator: mem.Allocator,
@@ -54,8 +48,6 @@ pub fn create(
 ) !*hwc.desktop.XdgToplevel {
     const toplevel = try allocator.create(hwc.desktop.XdgToplevel);
     errdefer allocator.destroy(toplevel);
-
-    log.debug("{*}", .{wlr_xdg_toplevel.parent});
 
     assert(!server.output_manager.outputs.empty());
     const current_output = server.input_manager.default_seat.focused_output.?;
@@ -225,7 +217,6 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
 
     toplevel.popup_tree.node.reparent(toplevel.primary_output.layers.popups);
     toplevel.surface_tree.node.reparent(toplevel.primary_output.layers.windows);
-    // toplevel.surface_tree.node.lowerToBottom(); // TODO: fix unecessary damage
 
     log.debug("commit {}x{} {}x{} {s}", .{
         box.width, box.height, box.x, box.y, toplevel.primary_output.wlr_output.name,
@@ -284,7 +275,6 @@ fn handleRequestMove(
 ) void {
     const toplevel: *hwc.desktop.XdgToplevel = @fieldParentPtr("request_move", listener);
     var cursor = &server.input_manager.default_seat.cursor;
-    cursor.wlr_cursor.setXcursor(cursor.wlr_xcursor_manager, "move");
 
     cursor.mode = .{ .move = toplevel };
     cursor.grab_x = cursor.wlr_cursor.x - @as(f64, @floatFromInt(toplevel.x));

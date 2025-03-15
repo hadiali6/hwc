@@ -16,7 +16,7 @@ devices: wl.list.Head(hwc.input.Device, .link),
 wlr_pointer_gestures: *wlr.PointerGesturesV1,
 wlr_relative_pointer_manager: *wlr.RelativePointerManagerV1,
 
-new_input: wl.Listener(*wlr.InputDevice) = wl.Listener(*wlr.InputDevice).init(handleNewInput),
+new_input: wl.Listener(*wlr.InputDevice) = .init(handleNewInput),
 
 pub fn init(self: *hwc.input.Manager) !void {
     self.* = .{

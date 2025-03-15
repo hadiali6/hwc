@@ -153,10 +153,12 @@ fn options(
 } {
     return .{
         .name = "hwc",
-        .root_source_file = b.path("src/main.zig"),
-        .target = context.target,
-        .optimize = context.optimize,
-        .strip = context.strip,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = context.target,
+            .optimize = context.optimize,
+            .strip = context.strip,
+        }),
         .use_llvm = context.llvm,
         .use_lld = context.llvm,
     };
@@ -165,7 +167,7 @@ fn options(
 fn initExe(exe: *std.Build.Step.Compile, context: Context) void {
     exe.pie = context.pie;
 
-    initModule(&exe.root_module, context);
+    initModule(exe.root_module, context);
 
     exe.linkLibC();
 

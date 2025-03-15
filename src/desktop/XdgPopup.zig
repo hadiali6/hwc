@@ -17,10 +17,10 @@ wlr_xdg_popup: *wlr.XdgPopup,
 root_tree: *wlr.SceneTree,
 surface_tree: *wlr.SceneTree,
 
-destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
-reposition: wl.Listener(void) = wl.Listener(void).init(handleReposition),
-commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(handleCommit),
-new_popup: wl.Listener(*wlr.XdgPopup) = wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
+destroy: wl.Listener(void) = .init(handleDestroy),
+reposition: wl.Listener(void) = .init(handleReposition),
+commit: wl.Listener(*wlr.Surface) = .init(handleCommit),
+new_popup: wl.Listener(*wlr.XdgPopup) = .init(handleNewPopup),
 
 pub fn create(
     allocator: mem.Allocator,
@@ -78,9 +78,8 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
 
     if (popup.wlr_xdg_popup.base.initial_commit) {
         popup.configure();
+        log.debug("{s}: parent='{!s}'", .{ @src().fn_name, popup.parentSurfaceStatus() });
     }
-
-    log.debug("{s}: parent='{!s}'", .{ @src().fn_name, popup.parentSurfaceStatus() });
 }
 
 fn configure(self: *hwc.desktop.XdgPopup) void {

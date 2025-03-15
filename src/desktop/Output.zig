@@ -25,10 +25,9 @@ layers: struct {
     popups: *wlr.SceneTree,
 },
 
-destroy: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleDestroy),
-frame: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleFrame),
-request_state: wl.Listener(*wlr.Output.event.RequestState) =
-    wl.Listener(*wlr.Output.event.RequestState).init(handleRequestState),
+destroy: wl.Listener(*wlr.Output) = .init(handleDestroy),
+frame: wl.Listener(*wlr.Output) = .init(handleFrame),
+request_state: wl.Listener(*wlr.Output.event.RequestState) = .init(handleRequestState),
 
 pub fn create(allocator: mem.Allocator, wlr_output: *wlr.Output) !*hwc.desktop.Output {
     const output = try allocator.create(hwc.desktop.Output);
@@ -186,8 +185,8 @@ fn handleFrame(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
         log.err("{s} failed: '{}': name='{s}'", .{ @src().fn_name, err, wlr_output.name });
     };
 
-    var now: posix.timespec = undefined;
-    posix.clock_gettime(posix.CLOCK.MONOTONIC, &now) catch @panic("CLOCK_MONOTONIC not supported");
+    var now: posix.timespec = posix.clock_gettime(posix.CLOCK.MONOTONIC) catch
+        @panic("CLOCK_MONOTONIC not supported");
     wlr_scene_output.sendFrameDone(&now);
 }
 

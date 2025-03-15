@@ -17,11 +17,11 @@ output: *hwc.desktop.Output,
 
 popup_tree: *wlr.SceneTree,
 
-destroy: wl.Listener(*wlr.LayerSurfaceV1) = wl.Listener(*wlr.LayerSurfaceV1).init(handleDestroy),
-new_popup: wl.Listener(*wlr.XdgPopup) = wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
-map: wl.Listener(void) = wl.Listener(void).init(handleMap),
-unmap: wl.Listener(void) = wl.Listener(void).init(handleUnmap),
-commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(handleCommit),
+destroy: wl.Listener(*wlr.LayerSurfaceV1) = .init(handleDestroy),
+new_popup: wl.Listener(*wlr.XdgPopup) = .init(handleNewPopup),
+map: wl.Listener(void) = .init(handleMap),
+unmap: wl.Listener(void) = .init(handleUnmap),
+commit: wl.Listener(*wlr.Surface) = .init(handleCommit),
 
 pub fn create(allocator: mem.Allocator, wlr_layer_surface: *wlr.LayerSurfaceV1) !void {
     const output: *hwc.desktop.Output = @ptrFromInt(wlr_layer_surface.output.?.data);

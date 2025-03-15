@@ -1,4 +1,4 @@
-all: run_no_llvm
+all: run_llvm
 
 test:
     clear && zig build test -Dtarget=x86_64-linux-gnu -Dcpu=x86_64 --search-prefix /usr -freference-trace --summary all 

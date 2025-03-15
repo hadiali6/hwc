@@ -15,24 +15,18 @@ cursor: hwc.input.Cursor,
 focused: hwc.desktop.Focusable = .none,
 focused_output: ?*hwc.desktop.Output = null,
 
-destroy: wl.Listener(*wlr.Seat) = wl.Listener(*wlr.Seat).init(handleDestroy),
+destroy: wl.Listener(*wlr.Seat) = .init(handleDestroy),
 
-focused_output_destroy: wl.Listener(*wlr.Output) =
-    wl.Listener(*wlr.Output).init(handleFocusedOutputDestroy),
-focused_scene_descriptor_destroy: wl.Listener(void) =
-    wl.Listener(void).init(handleFocusedSceneDescriptorDestroy),
+focused_output_destroy: wl.Listener(*wlr.Output) = .init(handleFocusedOutputDestroy),
+focused_scene_descriptor_destroy: wl.Listener(void) = .init(handleFocusedSceneDescriptorDestroy),
 
-request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) =
-    wl.Listener(*wlr.Seat.event.RequestSetCursor).init(handleRequestSetCursor),
-request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) =
-    wl.Listener(*wlr.Seat.event.RequestSetSelection).init(handleRequestSetSelection),
-request_set_primary_selection: wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection) =
-    wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection).init(handleRequestSetPrimarySelection),
+request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) = .init(handleRequestSetCursor),
+request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(handleRequestSetSelection),
+request_set_primary_selection: wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection) = .init(handleRequestSetPrimarySelection),
 
-request_start_drag: wl.Listener(*wlr.Seat.event.RequestStartDrag) =
-    wl.Listener(*wlr.Seat.event.RequestStartDrag).init(handleRequestStartDrag),
-start_drag: wl.Listener(*wlr.Drag) = wl.Listener(*wlr.Drag).init(handleStartDrag),
-drag_destroy: wl.Listener(*wlr.Drag) = wl.Listener(*wlr.Drag).init(handleDragDestroy),
+request_start_drag: wl.Listener(*wlr.Seat.event.RequestStartDrag) = .init(handleRequestStartDrag),
+start_drag: wl.Listener(*wlr.Drag) = .init(handleStartDrag),
+drag_destroy: wl.Listener(*wlr.Drag) = .init(handleDragDestroy),
 
 pub fn init(self: *hwc.input.Seat, name: [*:0]const u8) !void {
     self.* = .{

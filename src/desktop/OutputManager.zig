@@ -11,28 +11,26 @@ const server = &hwc.server;
 
 outputs: wl.list.Head(hwc.desktop.Output, .link),
 
-new_output: wl.Listener(*wlr.Output) = wl.Listener(*wlr.Output).init(handleNewOutput),
+new_output: wl.Listener(*wlr.Output) = .init(handleNewOutput),
 
 wlr_presentation: *wlr.Presentation,
 wlr_xdg_output_manager: *wlr.XdgOutputManagerV1,
 
 wlr_output_layout: *wlr.OutputLayout,
-layout_change: wl.Listener(*wlr.OutputLayout) =
-    wl.Listener(*wlr.OutputLayout).init(handleLayoutChange),
+layout_change: wl.Listener(*wlr.OutputLayout) = .init(handleLayoutChange),
 
 wlr_output_manager: *wlr.OutputManagerV1,
-apply_config: wl.Listener(*wlr.OutputConfigurationV1) =
-    wl.Listener(*wlr.OutputConfigurationV1).init(handleApplyConfig),
-test_config: wl.Listener(*wlr.OutputConfigurationV1) =
-    wl.Listener(*wlr.OutputConfigurationV1).init(handleTestConfig),
+apply_config: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleApplyConfig),
+test_config: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleTestConfig),
 
 wlr_gamma_control_manager: *wlr.GammaControlManagerV1,
-set_gamma: wl.Listener(*wlr.GammaControlManagerV1.event.SetGamma) =
-    wl.Listener(*wlr.GammaControlManagerV1.event.SetGamma).init(handleSetGamma),
+set_gamma: wl.Listener(*wlr.GammaControlManagerV1.event.SetGamma) = .init(handleSetGamma),
 
 wlr_output_power_manager: *wlr.OutputPowerManagerV1,
-set_power_mode: wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode) =
-    wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode).init(handleSetPowerMode),
+set_power_mode: wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode) = .init(handleSetPowerMode),
+
+wlr_drm_lease_manager: ?*wlr.DrmLeaseManagerV1,
+drm_lease_request: wl.Listener(*wlr.DrmLeaseRequestV1) = .init(handleDrmLeaseRequest),
 
 pub fn init(self: *hwc.desktop.OutputManager) !void {
     const wlr_output_layout = try wlr.OutputLayout.create(server.wl_server);
@@ -46,6 +44,7 @@ pub fn init(self: *hwc.desktop.OutputManager) !void {
         .wlr_output_manager = try wlr.OutputManagerV1.create(server.wl_server),
         .wlr_output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
         .wlr_gamma_control_manager = try wlr.GammaControlManagerV1.create(server.wl_server),
+        .wlr_drm_lease_manager = wlr.DrmLeaseManagerV1.create(server.wl_server, server.wlr_backend),
     };
 
     self.outputs.init();
@@ -56,6 +55,10 @@ pub fn init(self: *hwc.desktop.OutputManager) !void {
     self.wlr_output_manager.events.@"test".add(&self.test_config);
     self.wlr_output_power_manager.events.set_mode.add(&self.set_power_mode);
     self.wlr_gamma_control_manager.events.set_gamma.add(&self.set_gamma);
+
+    if (self.wlr_drm_lease_manager) |wlr_drm_lease_manager| {
+        wlr_drm_lease_manager.events.request.add(&self.drm_lease_request);
+    }
 }
 pub fn deinit(self: *hwc.desktop.OutputManager) void {
     self.new_output.link.remove();
@@ -133,4 +136,19 @@ fn handleSetGamma(
     const output_manager: *hwc.desktop.OutputManager = @fieldParentPtr("set_gamma", listener);
     _ = output_manager;
     _ = event;
+}
+
+// TODO
+fn handleDrmLeaseRequest(
+    listener: *wl.Listener(*wlr.DrmLeaseRequestV1),
+    wlr_drm_lease_request: *wlr.DrmLeaseRequestV1,
+) void {
+    const output_manager: *hwc.desktop.OutputManager = @fieldParentPtr("drm_lease_request", listener);
+    _ = output_manager;
+
+    _ = wlr_drm_lease_request.grant() orelse {
+        log.err("{s} failed: unable to grant lease request", .{@src().fn_name});
+        wlr_drm_lease_request.reject();
+        return;
+    };
 }
